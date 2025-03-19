@@ -18,6 +18,7 @@ Bioinformatics involves juggling lots of files, particularly reference datasets 
 - [ ] tasks/rules that tell `refman` to do some operation on a file once it's downloaded, potentially in an embedded scripting language like [Lua](https://www.lua.org/) or [Gluon](https://github.com/gluon-lang/gluon)
 - [ ] stable config file format
 - [ ] a global dotfile format with higher precedence than the tool's current defaults
+- [ ] a python API with a restricted feature set that is pip-installable
 
 If you're interested in speeding any of these or other features along, or find any bugs, please reach out in [the repo's issues](https://github.com/nrminor/refman/issues)!
 
