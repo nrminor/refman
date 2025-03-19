@@ -24,7 +24,7 @@ use crate::EntryError;
 /// Files are stored as optional strings, typically representing paths or identifiers to the actual
 /// data. This allows for flexible dataset configurations while maintaining data integrity through
 /// the `try_new()` constructor.
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct RefDataset {
     pub label: String,
     // TODO: Some ideas on fields to add

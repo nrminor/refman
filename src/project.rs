@@ -917,3 +917,186 @@ fn set_refman_home(desired_dir: &str) {
         unsafe { env::set_var("REFMAN_HOME", desired_dir) }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use tokio;
+
+    #[test]
+    fn test_new_project() {
+        let title = Some("Test Project".to_string());
+        let desc = Some("A test project".to_string());
+        let project = Project::new(title.clone(), desc.clone(), false);
+
+        assert_eq!(project.project.title, title);
+        assert_eq!(project.project.description, desc);
+        assert!(!project.project.global);
+        assert!(project.project.datasets.is_empty());
+    }
+
+    #[test]
+    fn test_is_registered() {
+        let mut project = Project::new(None, None, false);
+        let dataset = RefDataset {
+            label: "test_genome".into(),
+            fasta: Some("https://example.com/genome.fasta".into()),
+            ..Default::default()
+        };
+
+        project = project.register(dataset).unwrap();
+        assert!(project.is_registered("test_genome"));
+        assert!(!project.is_registered("nonexistent"));
+    }
+
+    #[test]
+    fn test_register_new_dataset() {
+        let mut project = Project::new(None, None, false);
+        let dataset = RefDataset {
+            label: "test_genome".into(),
+            fasta: Some("https://example.com/genome.fasta".into()),
+            genbank: Some("https://example.com/genome.gb".into()),
+            ..Default::default()
+        };
+
+        project = project.register(dataset.clone()).unwrap();
+        assert_eq!(project.datasets().len(), 1);
+        assert_eq!(project.datasets()[0], dataset);
+    }
+
+    #[test]
+    fn test_update_existing_dataset() {
+        let mut project = Project::new(None, None, false);
+        let dataset1 = RefDataset {
+            label: "test_genome".into(),
+            fasta: Some("https://example.com/old.fasta".into()),
+            ..Default::default()
+        };
+        let dataset2 = RefDataset {
+            label: "test_genome".into(),
+            fasta: Some("https://example.com/new.fasta".into()),
+            ..Default::default()
+        };
+
+        project = project.register(dataset1).unwrap();
+        project = project.register(dataset2).unwrap();
+
+        assert_eq!(project.datasets().len(), 1);
+        assert_eq!(
+            project.datasets()[0].fasta,
+            Some("https://example.com/new.fasta".into())
+        );
+    }
+
+    #[test]
+    fn test_remove_dataset() {
+        let mut project = Project::new(None, None, false);
+        let dataset1 = RefDataset {
+            label: "genome1".into(),
+            fasta: Some("https://example.com/1.fasta".into()),
+            ..Default::default()
+        };
+        let dataset2 = RefDataset {
+            label: "genome2".into(),
+            fasta: Some("https://example.com/2.fasta".into()),
+            ..Default::default()
+        };
+
+        project = project.register(dataset1).unwrap();
+        project = project.register(dataset2).unwrap();
+        project = project.remove("genome1").unwrap();
+
+        assert_eq!(project.datasets().len(), 1);
+        assert_eq!(project.datasets()[0].label, "genome2");
+    }
+
+    #[test]
+    fn test_remove_final_dataset_error() {
+        let mut project = Project::new(None, None, false);
+        let dataset = RefDataset {
+            label: "test_genome".into(),
+            fasta: Some("https://example.com/genome.fasta".into()),
+            ..Default::default()
+        };
+
+        project = project.register(dataset).unwrap();
+        let result = project.remove("test_genome");
+
+        assert!(matches!(result, Err(EntryError::FinalEntry(_))));
+    }
+
+    #[test]
+    fn test_remove_nonexistent_dataset_error() {
+        let mut project = Project::new(None, None, false);
+        let dataset = RefDataset {
+            label: "test_genome".into(),
+            fasta: Some("https://example.com/genome.fasta".into()),
+            ..Default::default()
+        };
+
+        project = project.register(dataset).unwrap();
+        let result = project.remove("nonexistent");
+
+        assert!(matches!(result, Err(EntryError::LabelNotFound(_))));
+    }
+
+    #[test]
+    fn test_registry_options_new() {
+        let temp_dir = tempdir().unwrap();
+        let dir_path = temp_dir.path().to_str().unwrap();
+
+        let options = RegistryOptions::try_new(
+            Some("Test Registry".to_string()),
+            Some("Test Description".to_string()),
+            Some(dir_path.to_string()),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(
+            options.resolved_path,
+            PathBuf::from(dir_path).join("refman.toml")
+        );
+        assert_eq!(options.title, Some("Test Registry".to_string()));
+        assert_eq!(options.description, Some("Test Description".to_string()));
+        assert!(!options.global);
+    }
+
+    #[tokio::test]
+    async fn test_download_dataset() {
+        let temp_dir = tempdir().unwrap();
+        let mut project = Project::new(None, None, false);
+        let dataset = RefDataset {
+            label: "test".into(),
+            fasta: Some("https://example.com/nonexistent.fasta".into()),
+            ..Default::default()
+        };
+
+        project = project.register(dataset).unwrap();
+        let result = project
+            .download_dataset("test", temp_dir.path().to_path_buf())
+            .await;
+
+        // Should fail since URL doesn't exist
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_write_registry() {
+        let temp_dir = tempdir().unwrap();
+        let dir_path = temp_dir.path().to_str().unwrap();
+
+        let options =
+            RegistryOptions::try_new(None, None, Some(dir_path.to_string()), false).unwrap();
+
+        // Test writing
+        let mut project = Project::new(None, None, false);
+        options.write_registry(&mut project).unwrap();
+        assert!(options.resolved_path.exists());
+
+        // Test reading
+        let read_project = options.read_registry().unwrap();
+        assert_eq!(read_project.datasets().len(), 0);
+    }
+}

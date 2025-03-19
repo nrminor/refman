@@ -42,3 +42,7 @@ codegen-units = 1
 incremental = true
 panic = "abort"
 strip = "symbols"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+tempfile = "3.19.1"
