@@ -4,7 +4,10 @@ use anyhow::{Result, bail};
 use futures::StreamExt;
 use log::{debug, error, info, warn};
 use reqwest::Client;
-use tokio::{fs::File, io::AsyncWriteExt};
+use tokio::{
+    fs::{self, File},
+    io::AsyncWriteExt,
+};
 
 /// A helper function for downloading files with retry attempts built in.
 ///
@@ -63,6 +66,9 @@ pub async fn request_dataset(url: &str, client: Client, target_dir: &Path) -> Re
 
     if response.status().is_success() {
         let file_path = target_dir.join(filename);
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
         let mut file = File::create(file_path).await?;
         let mut stream = response.bytes_stream();
 

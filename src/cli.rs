@@ -79,7 +79,7 @@ pub enum Commands {
     Register {
         /// Shorthand label for a dataset to register with refman. Once registered, this shorthand can be used
         /// to download and manage reference datasets in the future.
-        #[arg(short, long, required = true)]
+        #[arg(index = 1, required = true)]
         label: String,
 
         /// URL to simple reference sequence in FASTA format
@@ -122,7 +122,7 @@ pub enum Commands {
     Remove {
         /// Shorthand label for a dataset to register with refman. Once registered, this shorthand can be used
         /// to download and manage reference datasets in the future.
-        #[arg(short, long, required = true)]
+        #[arg(index = 1, required = true)]
         label: String,
 
         /// Optional file path (absolute or relative) to the refget registry file.
@@ -154,7 +154,7 @@ pub enum Commands {
     )]
     Download {
         /// Label string for a registered dataset
-        #[arg(short, long, required = true)]
+        #[arg(index = 1, required = true)]
         label: String,
 
         /// Destination directory for downloaded files, defaulting to the current working directory.
