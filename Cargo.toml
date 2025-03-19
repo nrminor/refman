@@ -1,0 +1,44 @@
+[package]
+name = "refman"
+version = "0.1.0"
+edition = "2024"
+description = "A command-line manager for bespoke reference datasets used in bioinformatic analyses"
+authors = ["Nicholas Minor <nrminor@wisc.edu>"]
+readme = "README.md"
+license = "MIT"
+rust-version = "1.85.0"
+repository = "https://github.com/nrminor/refman"
+homepage = "https://github.com/nrminor/refman"
+documentation = "https://github.com/nrminor/refman/blob/main/README.md"
+keywords = ["science", "reproducibility", "bioinformatics", "data"]
+categories = ["command-line-utilities", "science"]
+exclude = []
+
+[dependencies]
+anyhow = "1.0.97"
+clap = { version = "4.5.32", features = ["derive"] }
+clap-verbosity-flag = { version = "3.0.2" }
+dirs = "6.0.0"
+fern = { version = "0.7.1", features = ["colored"] }
+futures = "0.3.31"
+jiff = { version = "0.2.4", features = ["serde", "logging"] }
+log = "0.4.26"
+prettytable = "0.10.0"
+reqwest = { version = "0.12.14", features = ["stream"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+thiserror = "2.0.12"
+tokio = { version = "1.44.1", features = ["full"] }
+toml = "0.8.20"
+
+[profile.dev]
+incremental = true
+lto = false
+
+[profile.release]
+lto = "fat"
+opt-level = "z"
+codegen-units = 1
+incremental = true
+panic = "abort"
+strip = "symbols"
