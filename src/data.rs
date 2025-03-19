@@ -87,3 +87,88 @@ impl RefDataset {
         &self.label
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_dataset() {
+        let result = RefDataset::try_new("empty".to_string(), None, None, None, None, None, None);
+        assert!(matches!(result, Err(EntryError::LabelButNoFiles)));
+    }
+
+    #[test]
+    fn test_valid_sequence_only() {
+        let result = RefDataset::try_new(
+            "sequence_only".to_string(),
+            Some("path/to/sequence.fasta".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_valid_multiple_files() {
+        let result = RefDataset::try_new(
+            "multiple_files".to_string(),
+            Some("path/to/sequence.fasta".to_string()),
+            None,
+            Some("path/to/assembly.gfa".to_string()),
+            Some("path/to/features.gff".to_string()),
+            Some("path/to/genes.gtf".to_string()),
+            Some("path/to/intervals.bed".to_string()),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_annotations_without_sequence() {
+        let result = RefDataset::try_new(
+            "invalid_combo".to_string(),
+            None,
+            None,
+            None,
+            Some("path/to/features.gff".to_string()),
+            None,
+            None,
+        );
+        assert!(matches!(
+            result,
+            Err(EntryError::AnnotationsButNoSequence(_))
+        ));
+    }
+
+    #[test]
+    fn test_label_accessor() {
+        let dataset = RefDataset::try_new(
+            "test_label".to_string(),
+            Some("sequence.fasta".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(dataset.label(), "test_label");
+    }
+
+    #[test]
+    fn test_genbank_as_sequence() {
+        let result = RefDataset::try_new(
+            "genbank_sequence".to_string(),
+            None,
+            Some("path/to/sequence.gb".to_string()),
+            None,
+            Some("path/to/features.gff".to_string()),
+            None,
+            None,
+        );
+        assert!(result.is_ok());
+    }
+}
