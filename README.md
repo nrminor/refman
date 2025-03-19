@@ -13,6 +13,7 @@ Bioinformatics involves juggling lots of files, particularly reference datasets 
 - [ ] a GitHub workflow for generating releases so that static binaries are available
 - [ ] publication on [crates.io](https://crates.io/)
 - [ ] potential API access to well-known repositories or other data stores
+- [ ] the ability to symlink locations in the local filesystem as opposed to only pulling from the internet
 - [ ] expanded metadata fields or file formats
 - [ ] validation that an entry in a given file format is actually that format
 - [ ] tasks/rules that tell `refman` to do some operation on a file once it's downloaded, potentially in an embedded scripting language like [Lua](https://www.lua.org/) or [Gluon](https://github.com/gluon-lang/gluon)
