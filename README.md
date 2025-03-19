@@ -11,13 +11,20 @@ Bioinformatics involves juggling lots of files, particularly reference datasets 
 - [ ] black-box-, white-box-, and doc-tests
 - [ ] link-checking with [lychee_lib](https://docs.rs/lychee-lib/latest/lychee_lib/)
 - [ ] a GitHub workflow for generating releases so that static binaries are available
+- [ ] publication on [crates.io](https://crates.io/)
 - [ ] potential API access to well-known repositories or other data stores
 - [ ] expanded metadata fields or file formats
 - [ ] validation that an entry in a given file format is actually that format
+- [ ] tasks/rules that tell `refman` to do some operation on a file once it's downloaded, potentially in an embedded scripting language like [Lua](https://www.lua.org/) or [Gluon](https://github.com/gluon-lang/gluon)
 - [ ] stable config file format
 - [ ] a global dotfile format with higher precedence than the tool's current defaults
 
 If you're interested in speeding any of these or other features along, or find any bugs, please reach out in [the repo's issues](https://github.com/nrminor/refman/issues)!
+
+#### Non-goals
+
+1. Maximal performance. The `refman` code contains a few clones here and there where it's convenient, though never for large amounts of data.
+2. Minimal dependencies. I've used this project in part to explore some interesting [crates](https://crates.io/) from the Rust ecosystem that I haven't used previously.
 
 ## Installation
 
