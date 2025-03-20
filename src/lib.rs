@@ -7,6 +7,10 @@ pub mod project;
 
 pub mod prelude {
 
+    // re-exports
+    pub use crate::data::RefDataset;
+    pub use crate::project::{Project, RegistryOptions};
+
     use std::io;
 
     use thiserror::Error;

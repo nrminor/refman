@@ -23,7 +23,7 @@ between users to aid scientific reproducibility.
 #[derive(Parser)]
 #[clap(name = "refman")]
 #[clap(about = INFO)]
-#[clap(version = "v1.0.0")]
+#[clap(version = "v1.1.0")]
 pub struct Cli {
     #[command(flatten)]
     pub verbose: clap_verbosity_flag::Verbosity,
