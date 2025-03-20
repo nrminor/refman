@@ -1,4 +1,4 @@
-#![allow(clippy::pedantic, clippy::perf)]
+// #![warn(clippy::pedantic, clippy::perf)]
 
 pub mod cli;
 pub mod data;

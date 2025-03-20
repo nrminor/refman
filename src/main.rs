@@ -1,3 +1,5 @@
+// #![warn(clippy::pedantic, clippy::perf)]
+
 use std::env;
 
 use anyhow::{Context, Result};

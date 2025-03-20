@@ -51,7 +51,7 @@ use crate::{EntryError, RegistryError, data::RefDataset, downloads::request_data
 ///
 /// The Project struct integrates with other refman types like RefDataset for managing individual
 /// reference datasets and RegistryOptions for configuring where and how the registry is stored.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Project {
     project: Registry,
 }
@@ -277,16 +277,14 @@ impl Project {
         let dataset = self.get_dataset(label).await?;
 
         // build a vector based on the URLs that may or may not be available for downloading
-        let urls = {
-            let mut urls = Vec::with_capacity(6);
-            urls.push(dataset.fasta.clone());
-            urls.push(dataset.genbank.clone());
-            urls.push(dataset.gfa.clone());
-            urls.push(dataset.gff.clone());
-            urls.push(dataset.gtf.clone());
-            urls.push(dataset.bed.clone());
-            urls
-        }
+        let urls = vec![
+            dataset.fasta.clone(),
+            dataset.genbank.clone(),
+            dataset.gfa.clone(),
+            dataset.gff.clone(),
+            dataset.gtf.clone(),
+            dataset.bed.clone(),
+        ]
         .into_iter()
         .flatten()
         .collect::<Vec<String>>();
@@ -727,7 +725,7 @@ fn abbreviate_str(s: String, max_chars: usize, head_chars: usize, tail_chars: us
     format!("{}...{}", head, tail)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Registry {
     title: Option<String>,
     description: Option<String>,
