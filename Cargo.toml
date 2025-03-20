@@ -21,8 +21,10 @@ clap-verbosity-flag = { version = "3.0.2" }
 dirs = "6.0.0"
 fern = { version = "0.7.1", features = ["colored"] }
 futures = "0.3.31"
+indicatif = { version = "0.17.11", features = ["futures", "tokio", "rayon"] }
 jiff = { version = "0.2.4", features = ["serde", "logging"] }
 log = "0.4.26"
+lychee-lib = "0.18.1"
 prettytable = "0.10.0"
 reqwest = { version = "0.12.14", features = ["stream"] }
 serde = { version = "1.0.219", features = ["derive"] }
@@ -30,6 +32,7 @@ serde_json = "1.0.140"
 thiserror = "2.0.12"
 tokio = { version = "1.44.1", features = ["full"] }
 toml = "0.8.20"
+url = "2.5.4"
 
 [profile.dev]
 incremental = true

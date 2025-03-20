@@ -3,9 +3,11 @@ use std::{
     fs::{self, File, read_to_string},
     path::PathBuf,
     str::FromStr,
+    sync::Arc,
 };
 
 use futures::{StreamExt, stream::FuturesUnordered};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use jiff::Timestamp;
 use log::{debug, info, warn};
 use prettytable::{Table, row};
@@ -113,6 +115,7 @@ impl Project {
     ///
     /// A read-only slice containing all registered RefDataset entries in the project.
     /// Returns an empty slice if no datasets are registered.
+    #[inline]
     pub fn datasets(&self) -> &[RefDataset] {
         self.project.datasets.as_slice()
     }
@@ -137,6 +140,7 @@ impl Project {
     ///
     /// A mutable slice containing all registered RefDataset entries in the project.
     /// Returns an empty slice if no datasets are registered.
+    #[inline]
     pub fn datasets_mut(&mut self) -> &mut [RefDataset] {
         self.project.datasets.as_mut_slice()
     }
@@ -163,8 +167,131 @@ impl Project {
     /// A Vec containing all registered RefDataset entries, transferring ownership from
     /// the Project to the caller. Returns an empty Vec if no datasets were registered.
     /// The Project instance is consumed in the process.
+    #[inline]
     pub fn datasets_owned(self) -> Vec<RefDataset> {
         self.project.datasets
+    }
+
+    /// Returns a reference to a specific dataset from the Project's registry by its label.
+    ///
+    /// This method provides direct access to individual reference datasets stored in the project's
+    /// registry. It takes a label string and returns a reference to the matching RefDataset if one
+    /// exists. Each dataset in a refman Project has a unique label that identifies it, containing
+    /// optional references to various bioinformatics file formats (FASTA, GenBank, GFA, GFF, GTF, BED).
+    ///
+    /// The method enforces that:
+    /// - The label must exactly match a registered dataset (case-sensitive)
+    /// - Only one dataset can have a given label (unique key constraint)
+    /// - The dataset must exist in the registry
+    ///
+    /// This is commonly used to:
+    /// - Check details of specific registered datasets
+    /// - Access dataset file URLs before downloading
+    /// - Verify dataset registration status
+    /// - Extract dataset metadata
+    ///
+    /// The method complements other Project methods like register() and download_dataset() in the
+    /// dataset management lifecycle. While those methods add and fetch datasets, get_dataset()
+    /// provides read access to verify and inspect registered data.
+    ///
+    /// # Arguments
+    ///
+    /// * `label` - The unique label identifying the dataset to retrieve
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(&RefDataset) with a reference to the matching dataset if found.
+    /// Returns EntryError::LabelNotFound if no dataset matches the provided label.
+    ///
+    /// # Errors
+    ///
+    /// Can return EntryError::LabelNotFound if the requested dataset label is not
+    /// registered in the project.
+    #[inline]
+    pub async fn get_dataset(&self, label: &str) -> Result<&RefDataset, EntryError> {
+        // pull in a read-only slice of the datasets currently in project state
+        let datasets = self.datasets();
+
+        // If a dataset isn't in the current project state, return a refman error
+        // wrapped in an anyhow error.
+        if datasets
+            .iter()
+            .map(|dataset| dataset.label.as_str())
+            .filter(|ds_label| *ds_label == label)
+            .collect::<Vec<&str>>()
+            .is_empty()
+        {
+            Err(EntryError::LabelNotFound(label.to_string()))?;
+        }
+
+        // make sure only one dataset matches the provided label, which must be a unique
+        // key
+        let entry: Vec<_> = datasets
+            .iter()
+            .filter(|dataset| dataset.label == label)
+            .collect();
+        assert_eq!(entry.len(), 1);
+
+        Ok(entry[0])
+    }
+
+    /// Returns a vector of all registered file URLs for a dataset with the given label.
+    ///
+    /// This method provides access to all file URLs registered for a dataset, combining any valid URLs
+    /// across the supported bioinformatics file formats (FASTA, GenBank, GFA, GFF, GTF, BED). The URLs
+    /// can then be used to download reference files, validate dataset completeness, or inspect available
+    /// file formats.
+    ///
+    /// The method will:
+    /// - Verify the dataset exists by the given label
+    /// - Extract all non-None URLs registered for that dataset
+    /// - Return them as a vector in a consistent order (FASTA, GenBank, etc.)
+    ///
+    /// This complements other dataset access methods by providing URL-specific functionality. While
+    /// get_dataset() returns the full dataset struct and download_dataset() handles file fetching,
+    /// get_dataset_urls() focuses specifically on URL access and validation.
+    ///
+    /// The method is used internally by download_dataset() to determine which files to fetch, but can
+    /// also be used directly to:
+    /// - Preview what files are available before downloading
+    /// - Extract URLs for custom download handling
+    /// - Verify dataset completeness
+    /// - Share dataset URLs
+    ///
+    /// # Arguments
+    ///
+    /// * `label` - The unique label identifying the dataset whose URLs should be retrieved
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(Vec<String>) containing all non-None URLs registered for the dataset.
+    /// Returns an empty vector if the dataset exists but has no URLs registered.
+    /// Returns EntryError::LabelNotFound if no dataset matches the provided label.
+    ///
+    /// # Errors
+    ///
+    /// Can return EntryError::LabelNotFound if the requested dataset label is not in the registry.
+    #[inline]
+    pub async fn get_dataset_urls(&self, label: &str) -> Result<Vec<String>, EntryError> {
+        // access the dataset for the provided label
+        let dataset = self.get_dataset(label).await?;
+
+        // build a vector based on the URLs that may or may not be available for downloading
+        let urls = {
+            let mut urls = Vec::with_capacity(6);
+            urls.push(dataset.fasta.clone());
+            urls.push(dataset.genbank.clone());
+            urls.push(dataset.gfa.clone());
+            urls.push(dataset.gff.clone());
+            urls.push(dataset.gtf.clone());
+            urls.push(dataset.bed.clone());
+            urls
+        }
+        .into_iter()
+        .flatten()
+        .collect::<Vec<String>>();
+
+        Ok(urls)
     }
 
     /// Checks if a dataset with a given label is registered in the project.
@@ -350,49 +477,35 @@ impl Project {
         // make a new reqwuest http client that can be shared between threads
         let shared_client = Client::new();
 
-        // pull in a read-only slice of the datasets currently in project state
-        let datasets = self.datasets();
+        let urls = self.get_dataset_urls(label).await?;
 
-        // If a dataset isn't in the current project state, return a refman error
-        // wrapped in an anyhow error.
-        if datasets
-            .iter()
-            .map(|dataset| dataset.label.as_str())
-            .filter(|ds_label| *ds_label == label)
-            .collect::<Vec<&str>>()
-            .is_empty()
-        {
-            Err(EntryError::LabelNotFound(label.to_string()))?;
-        }
+        // compute the number of files to download for introspection
+        let num_to_download = urls.len();
 
-        // make sure only one dataset matches the provided label, which must be a unique
-        // key
-        let entry: Vec<_> = datasets
-            .iter()
-            .filter(|dataset| dataset.label == label)
-            .collect();
-        assert_eq!(entry.len(), 1);
+        // Create a shared MultiProgress container.
+        let mp = Arc::new(MultiProgress::new());
 
-        // build a vector based on the URLs that may or may not be available for downloading
-        let urls = {
-            let mut urls = Vec::with_capacity(6);
-            urls.push(entry[0].fasta.clone());
-            urls.push(entry[0].genbank.clone());
-            urls.push(entry[0].gfa.clone());
-            urls.push(entry[0].gff.clone());
-            urls.push(entry[0].gtf.clone());
-            urls.push(entry[0].bed.clone());
-            urls
-        };
+        // Create a top-level progress bar with total length equal to the number of files.
+        let toplevel_pb = mp.add(ProgressBar::new(num_to_download as u64));
+        toplevel_pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                .expect("Failed to set template"),
+        );
+        toplevel_pb.set_message(format!(
+            "Downloading {} files for project labeled '{}'...",
+            num_to_download, label
+        ));
 
         // put each download into its own tokio thread, and collect its handle into a vector
         // that can be polled downstream
         let mut task_handles = Vec::with_capacity(urls.len());
-        for url in urls.into_iter().flatten() {
+        for url in urls {
             let thread_local_client = shared_client.clone();
             let thread_local_dir = target_dir.clone();
+            let mp = mp.clone();
             let handle = tokio::spawn(async move {
-                request_dataset(&url, thread_local_client, &thread_local_dir).await
+                request_dataset(&url, thread_local_client, &thread_local_dir, mp).await
             });
             task_handles.push(handle);
         }
@@ -407,7 +520,14 @@ impl Project {
                 Ok(download_attempt) => download_attempt,
                 Err(thread_error) => Err(thread_error)?,
             }?;
+            toplevel_pb.inc(1);
         }
+
+        // Once all downloads finish, update and finish the overall progress bar.
+        toplevel_pb.finish_with_message(format!(
+            "Done! {} files successfully downloaded to {:?}.",
+            num_to_download, target_dir
+        ));
 
         Ok(())
     }
@@ -526,17 +646,48 @@ impl Project {
         for dataset in datasets {
             pretty_table.add_row(row![
                 dataset.label,
-                dataset.fasta.clone().unwrap_or("".to_string()),
-                dataset.genbank.clone().unwrap_or("".to_string()),
-                dataset.gfa.clone().unwrap_or("".to_string()),
-                dataset.gff.clone().unwrap_or("".to_string()),
-                dataset.gtf.clone().unwrap_or("".to_string()),
-                dataset.bed.clone().unwrap_or("".to_string())
+                abbreviate_str(dataset.fasta.clone().unwrap_or("".to_string()), 20, 12, 20),
+                abbreviate_str(
+                    dataset.genbank.clone().unwrap_or("".to_string()),
+                    20,
+                    12,
+                    20
+                ),
+                abbreviate_str(dataset.gfa.clone().unwrap_or("".to_string()), 20, 12, 20),
+                abbreviate_str(dataset.gff.clone().unwrap_or("".to_string()), 20, 12, 20),
+                abbreviate_str(dataset.gtf.clone().unwrap_or("".to_string()), 20, 12, 20),
+                abbreviate_str(dataset.bed.clone().unwrap_or("".to_string()), 20, 12, 20),
             ]);
         }
 
         pretty_table.printstd();
     }
+}
+
+#[inline]
+fn abbreviate_str(s: String, max_chars: usize, head_chars: usize, tail_chars: usize) -> String {
+    // Count the characters in the string.
+    let char_count = s.chars().count();
+
+    // If the string is not too long, return it unchanged.
+    if char_count <= max_chars {
+        return s;
+    }
+
+    // Collect the first `head_chars` characters.
+    let head: String = s.chars().take(head_chars).collect();
+
+    // Collect the last `tail_chars` characters.
+    let tail: String = s
+        .chars()
+        .rev()
+        .take(tail_chars)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+
+    format!("{}...{}", head, tail)
 }
 
 #[derive(Debug, Serialize, Deserialize)]

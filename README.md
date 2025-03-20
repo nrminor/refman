@@ -9,11 +9,10 @@ Bioinformatics involves juggling lots of files, particularly reference datasets 
 `refman` is still a work in progress. Still on the roadmap are:
 
 - [ ] more black-box-, white-box-, and especially doc-tests
-- [ ] link-checking with [lychee_lib](https://docs.rs/lychee-lib/latest/lychee_lib/)
-- [ ] download progress bars
+- [x] link-checking with [lychee_lib](https://docs.rs/lychee-lib/latest/lychee_lib/)
+- [x] download progress bars
 - [ ] a GitHub workflow for generating releases so that static binaries are available
 - [ ] publication on [crates.io](https://crates.io/)
-- [ ] potential API access to well-known repositories or other data stores
 - [ ] the ability to symlink locations in the local filesystem as opposed to only pulling from the internet
 - [ ] expanded metadata fields or file formats, e.g., VCFs
 - [ ] validation that an entry in a given file format is actually that format
@@ -21,6 +20,7 @@ Bioinformatics involves juggling lots of files, particularly reference datasets 
 - [ ] stable config file format
 - [ ] a global dotfile format with higher precedence than the tool's current defaults
 - [ ] a python API with a restricted feature set that is pip-installable
+- [ ] potential API access to well-known repositories or other data stores
 
 If you're interested in speeding any of these or other features along, or find any bugs, please reach out in [the repo's issues](https://github.com/nrminor/refman/issues)!
 
