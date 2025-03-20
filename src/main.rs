@@ -47,7 +47,8 @@ async fn main() -> Result<()> {
             registry,
             global,
         }) => {
-            let new_dataset = RefDataset::try_new(label, fasta, genbank, gfa, gff, gtf, bed)?;
+            let new_dataset =
+                RefDataset::try_new(label, fasta, genbank, gfa, gff, gtf, bed).await?;
             let options = RegistryOptions::try_new(None, None, registry, global)?;
             let mut project = options.read_registry()?.register(new_dataset)?;
             options.write_registry(&mut project)?;

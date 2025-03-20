@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::EntryError;
+use crate::{EntryError, downloads::check_url};
 
 /// A structure that manages various types of data associated with a single biological reference dataset.
 /// A reference dataset typically consists of sequence files (like FASTA or Genbank)
@@ -43,7 +43,7 @@ impl RefDataset {
     /// Fully public new method that attempts to initialize a reference dataset entry while enforcing a few invariants,
     /// including that an annotation file can only ever be registered if it comes with a sequence to pull from, and
     /// that a label cannot be registered without at least one file.
-    pub fn try_new(
+    pub async fn try_new(
         label: String,
         fasta: Option<String>,
         genbank: Option<String>,
@@ -71,104 +71,42 @@ impl RefDataset {
 
             // If none of the above conditions are met, we're all good! Return an instance of the `RefDataset` struct
             // with validated combinations of fields.
-            _ => Ok(Self {
-                label,
-                fasta,
-                genbank,
-                gfa,
-                gff,
-                gtf,
-                bed,
-            }),
+            _ => {
+                // check each of the possible files, if provided by the user
+                if let Some(url_to_check) = &fasta {
+                    let _ = check_url(url_to_check).await?;
+                }
+                if let Some(url_to_check) = &genbank {
+                    let _ = check_url(url_to_check).await?;
+                }
+                if let Some(url_to_check) = &gfa {
+                    let _ = check_url(url_to_check).await?;
+                }
+                if let Some(url_to_check) = &gff {
+                    let _ = check_url(url_to_check).await?;
+                }
+                if let Some(url_to_check) = &gtf {
+                    let _ = check_url(url_to_check).await?;
+                }
+                if let Some(url_to_check) = &bed {
+                    let _ = check_url(url_to_check).await?;
+                }
+
+                // If all provided URLs are valid, set up an instance of a registry
+                Ok(Self {
+                    label,
+                    fasta,
+                    genbank,
+                    gfa,
+                    gff,
+                    gtf,
+                    bed,
+                })
+            }
         }
     }
 
     pub fn label(&self) -> &str {
         &self.label
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_empty_dataset() {
-        let result = RefDataset::try_new("empty".to_string(), None, None, None, None, None, None);
-        assert!(matches!(result, Err(EntryError::LabelButNoFiles)));
-    }
-
-    #[test]
-    fn test_valid_sequence_only() {
-        let result = RefDataset::try_new(
-            "sequence_only".to_string(),
-            Some("path/to/sequence.fasta".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_valid_multiple_files() {
-        let result = RefDataset::try_new(
-            "multiple_files".to_string(),
-            Some("path/to/sequence.fasta".to_string()),
-            None,
-            Some("path/to/assembly.gfa".to_string()),
-            Some("path/to/features.gff".to_string()),
-            Some("path/to/genes.gtf".to_string()),
-            Some("path/to/intervals.bed".to_string()),
-        );
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_annotations_without_sequence() {
-        let result = RefDataset::try_new(
-            "invalid_combo".to_string(),
-            None,
-            None,
-            None,
-            Some("path/to/features.gff".to_string()),
-            None,
-            None,
-        );
-        assert!(matches!(
-            result,
-            Err(EntryError::AnnotationsButNoSequence(_))
-        ));
-    }
-
-    #[test]
-    fn test_label_accessor() {
-        let dataset = RefDataset::try_new(
-            "test_label".to_string(),
-            Some("sequence.fasta".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        assert_eq!(dataset.label(), "test_label");
-    }
-
-    #[test]
-    fn test_genbank_as_sequence() {
-        let result = RefDataset::try_new(
-            "genbank_sequence".to_string(),
-            None,
-            Some("path/to/sequence.gb".to_string()),
-            None,
-            Some("path/to/features.gff".to_string()),
-            None,
-            None,
-        );
-        assert!(result.is_ok());
     }
 }

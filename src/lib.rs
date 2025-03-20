@@ -57,6 +57,10 @@ pub mod prelude {
             "The label `{0}` is the final entry in the refman registry, which will leave behind an invalid state. Please delete the `refman.toml` file to proceed."
         )]
         FinalEntry(String),
+        #[error(
+            "The URL provided to be registered is invalid or does not point to a resource that exists."
+        )]
+        InvalidURL(#[from] anyhow::Error),
     }
 
     #[derive(Debug, Error)]
