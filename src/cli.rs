@@ -139,6 +139,10 @@ pub enum Commands {
         visible_aliases = &["l"],
     )]
     List {
+        /// Label string for a registered dataset
+        #[arg(index = 1, required = false)]
+        label: Option<String>,
+
         /// Optional file path (absolute or relative) to the refget registry file.
         #[arg(short, long, required = false)]
         registry: Option<String>,

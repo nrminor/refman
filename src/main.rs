@@ -67,10 +67,14 @@ async fn main() -> Result<()> {
         }
 
         // The list subcommand prints the registered datasets in a human-readable table
-        Some(Commands::List { registry, global }) => {
+        Some(Commands::List {
+            registry,
+            global,
+            label,
+        }) => {
             RegistryOptions::try_new(None, None, registry, global)?
                 .read_registry()?
-                .prettyprint();
+                .prettyprint(label);
             Ok(())
         }
 

@@ -626,7 +626,49 @@ impl Project {
     /// The output is meant for human consumption and formatted for readability. For
     /// programmatic access to dataset information, use the datasets() or datasets_owned()
     /// methods instead.
-    pub fn prettyprint(self) {
+    pub fn prettyprint(self, label: Option<String>) {
+        if let Some(label_str) = label {
+            let datasets = self.datasets();
+            let dataset: Vec<_> = datasets
+                .iter()
+                .filter(|dataset| dataset.label == label_str)
+                .collect();
+            assert_eq!(
+                dataset.len(),
+                1,
+                "No project with the label '{label_str}' has been registered. Run `refman list` without the label to see which datasets are registered."
+            );
+            let unwrapped_dataset = dataset[0];
+
+            eprintln!("URLs registered for {label_str}:");
+            eprintln!("--------------------{}", "-".repeat(label_str.len()));
+            eprintln!(
+                " - FASTA: {}",
+                unwrapped_dataset.fasta.clone().unwrap_or("".to_string())
+            );
+            eprintln!(
+                " - Genbank: {}",
+                unwrapped_dataset.genbank.clone().unwrap_or("".to_string())
+            );
+            eprintln!(
+                " - GFA: {}",
+                unwrapped_dataset.gfa.clone().unwrap_or("".to_string())
+            );
+            eprintln!(
+                " - GFF: {}",
+                unwrapped_dataset.gff.clone().unwrap_or("".to_string())
+            );
+            eprintln!(
+                " - GTF: {}",
+                unwrapped_dataset.gtf.clone().unwrap_or("".to_string())
+            );
+            eprintln!(
+                " - BED: {}",
+                unwrapped_dataset.bed.clone().unwrap_or("".to_string())
+            );
+
+            return;
+        }
         // print a title field if it has been set
         let title_field = &self.project.title;
         if let Some(title) = title_field {
@@ -646,17 +688,12 @@ impl Project {
         for dataset in datasets {
             pretty_table.add_row(row![
                 dataset.label,
-                abbreviate_str(dataset.fasta.clone().unwrap_or("".to_string()), 20, 12, 20),
-                abbreviate_str(
-                    dataset.genbank.clone().unwrap_or("".to_string()),
-                    20,
-                    12,
-                    20
-                ),
-                abbreviate_str(dataset.gfa.clone().unwrap_or("".to_string()), 20, 12, 20),
-                abbreviate_str(dataset.gff.clone().unwrap_or("".to_string()), 20, 12, 20),
-                abbreviate_str(dataset.gtf.clone().unwrap_or("".to_string()), 20, 12, 20),
-                abbreviate_str(dataset.bed.clone().unwrap_or("".to_string()), 20, 12, 20),
+                abbreviate_str(dataset.fasta.clone().unwrap_or("".to_string()), 20, 8, 25),
+                abbreviate_str(dataset.genbank.clone().unwrap_or("".to_string()), 20, 8, 25),
+                abbreviate_str(dataset.gfa.clone().unwrap_or("".to_string()), 20, 8, 25),
+                abbreviate_str(dataset.gff.clone().unwrap_or("".to_string()), 20, 8, 25),
+                abbreviate_str(dataset.gtf.clone().unwrap_or("".to_string()), 20, 8, 25),
+                abbreviate_str(dataset.bed.clone().unwrap_or("".to_string()), 20, 8, 25),
             ]);
         }
 
