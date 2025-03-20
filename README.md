@@ -71,7 +71,7 @@ Options:
 
 ## Detailed Usage
 
-`refman`'s first deployment was in the bioinformatic pipeline [`oneroof`](), which is run routinely with different sets of reference datasets. These datasets were registered in the pipeline's [`refman.toml`]() file with the same series of commands that would be used with any project. To demonstrate this workflow, those commands are reproduced here.
+`refman`'s first deployment was in the bioinformatic pipeline [`oneroof`](https://github.com/nrminor/oneroof), which is run routinely with different reference datasets depending on the input data. These datasets were registered in the pipeline's [`refman.toml`](https://github.com/nrminor/oneroof/blob/main/refman.toml) file with the same series of commands that would be used with any project. To demonstrate this workflow, those commands are reproduced here.
 
 #### Project Initialization
 
@@ -92,7 +92,7 @@ global = false
 datasets = []
 ```
 
-No datasets have been registered yet. This `refman.toml` also uses the tool's default behavior, which it to make each project configuration local to a project instead of global to a machine. Support for global usage will increase with time, but in general we recommend that `refman` is used on a per-project basis to avoid confusion.
+No datasets have been registered yet. This `refman.toml` also uses the tool's default behavior, which includes making each `refman.toml` local to a project instead of global to a machine. Support for global usage will increase with time, but in general we recommend that `refman` is used on a per-project basis to avoid confusion.
 
 #### Registering URLs with Datasets
 
