@@ -4,6 +4,7 @@
 !.pre-commit-config.yaml
 !justfile
 !Dockerfile
+!INSTALL.sh
 !README.md
 !LICENSE
 !Cargo.toml

@@ -8,7 +8,7 @@ Bioinformatics involves juggling lots of files, particularly reference datasets 
 
 ### Precompiled Binary Releases
 
-Precompiled static binaries for a variety of platforms are available in [`refman`'s Github release](https://github.com/nrminor/refman/releases).
+Precompiled static binaries for a variety of platforms are available in [`refman`'s Github releases](https://github.com/nrminor/refman/releases).
 
 ### Crates.io
 
@@ -28,6 +28,10 @@ cd refman
 # compile and install it onto your $PATH with cargo
 cargo install --path="."
 ```
+
+### Use it through Python
+
+`refman` also has a Python API that can be installed with `pip install py-refman`. See [the `py-refman` Github repository](https://github.com/nrminor/py-refman) for more information about its usage.
 
 ## Quick Start
 
@@ -119,7 +123,7 @@ refman register -l "h5n1-B-segmental" \
 
 Note that, as documented in the help menu for `refman`, `reg` and `r` are aliases for the `register` subcommand. All `refman` subcommands have shorthand aliases. Also, URLs _must be provided between quotes_.
 
-Before completing the registration process, `refman` uses the Rust [`lychee` library](https://crates.io/crates/lychee-lib) to check that each provided URL is valid and points to resource that exists. This prevents invalid entries to `refman.toml` when managed through the command-line interface.
+Before completing the registration process, `refman` uses the Rust [`lychee` library](https://crates.io/crates/lychee-lib) to check that each provided URL is valid and points to a resource that exists. This prevents invalid entries to `refman.toml` when managed through the command-line interface.
 
 #### Downloading Datasets 
 
@@ -148,7 +152,7 @@ Keep in mind that if you're coming to a new project with datasets managed with `
 - [ ] tasks/rules that tell `refman` to do some operation on a file once it's downloaded, potentially in an embedded scripting language like [Lua](https://www.lua.org/) or [Gluon](https://github.com/gluon-lang/gluon)
 - [x] stable config file format
 - [ ] a global dotfile format with higher precedence than the tool's current defaults
-- [ ] a python API with a restricted feature set that is pip-installable
+- [x] [a python API](https://github.com/nrminor/py-refman) with a slightly restricted feature set that is [pip-installable]()
 
 If you're interested in speeding any of these or other features along, or find any bugs, please reach out in [the repo's issues](https://github.com/nrminor/refman/issues)!
 
