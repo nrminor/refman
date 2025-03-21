@@ -6,9 +6,9 @@ Bioinformatics involves juggling lots of files, particularly reference datasets 
 
 ## Installation
 
-### Precompiled Binary Releases
+### Precompiled Binary Releases - _Coming soon!_
 
-Precompiled static binaries for a variety of platforms are available in [`refman`'s Github releases](https://github.com/nrminor/refman/releases).
+Precompiled static binaries for a variety of platforms ~~are~~ will soon be available in [`refman`'s Github releases](https://github.com/nrminor/refman/releases).
 
 ### Crates.io
 
@@ -31,7 +31,7 @@ cargo install --path="."
 
 ### Use it through Python
 
-`refman` also has a Python API that can be installed with `pip install py-refman`. See [the `py-refman` Github repository](https://github.com/nrminor/py-refman) for more information about its usage.
+`refman` also has a Python API that can soon be installed with `pip install py-refman`. See [the `py-refman` Github repository](https://github.com/nrminor/py-refman) for more information about its usage.
 
 ## Quick Start
 
