@@ -22,6 +22,12 @@ async fn main() -> Result<()> {
 
     // Run the called subcommand or print info
     match cli.command {
+        // if no subcommand is provided in the command-line, just print the tool's info.
+        None => {
+            eprintln!("{}\n", cli::INFO);
+            std::process::exit(0);
+        }
+
         // simple command that creates a new file that can be used to track reference datasets
         Some(Commands::Init {
             registry,
@@ -99,12 +105,6 @@ async fn main() -> Result<()> {
             project.download_dataset(&label, destination).await?;
 
             Ok(())
-        }
-
-        // if no subcommand is provided in the command-line, just print the tool's info.
-        None => {
-            eprintln!("{}\n", cli::INFO);
-            std::process::exit(0);
         }
     }
 }

@@ -149,8 +149,9 @@ Keep in mind that if you're coming to a new project with datasets managed with `
 - [ ] the ability to symlink locations in the local filesystem as opposed to only pulling from the internet
 - [ ] expanded metadata fields or file formats, e.g., VCFs
 - [ ] validation that an entry in a given file format is actually that format
-- [ ] tasks/rules that tell `refman` to do some operation on a file once it's downloaded, potentially in an embedded scripting language like [Lua](https://www.lua.org/) or [Gluon](https://github.com/gluon-lang/gluon)
-- [x] stable config file format
+- [ ] file checksums
+- [ ] tasks/rules that tell `refman` to do some operation on a file once it's downloaded, potentially in an embedded scripting language like [Lua](https://www.lua.org/)
+- [ ] stable config file format
 - [ ] a global dotfile format with higher precedence than the tool's current defaults
 - [x] [a python API](https://github.com/nrminor/py-refman) with a slightly restricted feature set that is [pip-installable]()
 
