@@ -40,9 +40,58 @@ pub struct RefDataset {
 }
 
 impl RefDataset {
-    /// Fully public new method that attempts to initialize a reference dataset entry while enforcing a few invariants,
-    /// including that an annotation file can only ever be registered if it comes with a sequence to pull from, and
-    /// that a label cannot be registered without at least one file.
+    /// Create a new reference dataset while enforcing data integrity rules.
+    ///
+    /// This method creates a new [`RefDataset`] instance after validating that certain
+    /// critical invariants are maintained:
+    /// - Every dataset must have a non-empty label for identification
+    /// - At least one file (FASTA, Genbank, GFA, GFF, GTF, or BED) must be associated with a label
+    /// - Annotation files (GFF, GTF, BED) can only be included if there's an associated sequence file
+    ///   (FASTA or Genbank) present
+    /// - All provided file URLs must be valid and accessible
+    ///
+    /// # Arguments
+    ///
+    /// * `label` - A unique identifier for this reference dataset
+    /// * `fasta` - Optional URL to a FASTA format sequence file
+    /// * `genbank` - Optional URL to a Genbank format sequence file
+    /// * `gfa` - Optional URL to a GFA format assembly graph file
+    /// * `gff` - Optional URL to a GFF format annotation file
+    /// * `gtf` - Optional URL to a GTF format annotation file
+    /// * `bed` - Optional URL to a BED format annotation file
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result<RefDataset, EntryError>` which is:
+    /// - `Ok(RefDataset)` if all validation passes
+    /// - `Err(EntryError)` if any validation fails
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - No files are provided with the label (`EntryError::LabelButNoFiles`)
+    /// - Annotation files are provided without sequence files (`EntryError::AnnotationsButNoSequence`)
+    /// - Any provided URL is invalid or inaccessible
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use your_crate::RefDataset;
+    ///
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let dataset = RefDataset::try_new(
+    ///     "hg38".to_string(),
+    ///     Some("https://example.com/hg38.fa".to_string()),
+    ///     None,
+    ///     None,
+    ///     Some("https://example.com/hg38.gff".to_string()),
+    ///     None,
+    ///     None
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[allow(clippy::similar_names)]
     pub async fn try_new(
         label: String,
         fasta: Option<String>,
@@ -60,12 +109,8 @@ impl RefDataset {
             // The following cases occur when annotation file(s) are registered without a sequence file, e.g., FASTA or
             // Genbank, to pull from/associate with.
             (None, None, None, None, Some(label))
-            | (None, None, None, Some(label), None)
-            | (None, None, None, Some(label), Some(_))
-            | (None, None, Some(label), None, None)
-            | (None, None, Some(label), None, Some(_))
-            | (None, None, Some(label), Some(_), None)
-            | (None, None, Some(label), Some(_), Some(_)) => {
+            | (None, None, None, Some(label), None | Some(_))
+            | (None, None, Some(label), None | Some(_), None | Some(_)) => {
                 Err(EntryError::AnnotationsButNoSequence(label.to_string()))
             }
 
@@ -104,9 +149,5 @@ impl RefDataset {
                 })
             }
         }
-    }
-
-    pub fn label(&self) -> &str {
-        &self.label
     }
 }

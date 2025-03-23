@@ -1,4 +1,4 @@
-// #![warn(clippy::pedantic, clippy::perf)]
+#![warn(clippy::pedantic, clippy::perf)]
 
 use std::env;
 
@@ -7,10 +7,8 @@ use clap::Parser;
 use clap_verbosity_flag::Verbosity;
 use fern::colors::{Color, ColoredLevelConfig};
 use refman::{
-    RegistryError,
     cli::{self, Cli, Commands},
-    data::RefDataset,
-    project::RegistryOptions,
+    prelude::*,
 };
 
 #[tokio::main]
@@ -31,7 +29,7 @@ async fn main() -> Result<()> {
             title,
             description,
         }) => {
-            let options = RegistryOptions::try_new(title, description, registry, global)?;
+            let options = RegistryOptions::try_new(title, description, &registry, global)?;
             options.init()?;
             Ok(())
         }
@@ -51,7 +49,7 @@ async fn main() -> Result<()> {
         }) => {
             let new_dataset =
                 RefDataset::try_new(label, fasta, genbank, gfa, gff, gtf, bed).await?;
-            let options = RegistryOptions::try_new(None, None, registry, global)?;
+            let options = RegistryOptions::try_new(None, None, &registry, global)?;
             let mut project = options.read_registry()?.register(new_dataset)?;
             options.write_registry(&mut project)?;
             Ok(())
@@ -63,7 +61,7 @@ async fn main() -> Result<()> {
             registry,
             global,
         }) => {
-            let options = RegistryOptions::try_new(None, None, registry, global)?;
+            let options = RegistryOptions::try_new(None, None, &registry, global)?;
             let mut project = options.read_registry()?.remove(&label)?;
             options.write_registry(&mut project)?;
             Ok(())
@@ -75,7 +73,7 @@ async fn main() -> Result<()> {
             global,
             label,
         }) => {
-            RegistryOptions::try_new(None, None, registry, global)?
+            RegistryOptions::try_new(None, None, &registry, global)?
                 .read_registry()?
                 .prettyprint(label);
             Ok(())
@@ -88,7 +86,7 @@ async fn main() -> Result<()> {
             dest,
             global,
         }) => {
-            let options = RegistryOptions::try_new(None, None, registry, global)?;
+            let options = RegistryOptions::try_new(None, None, &registry, global)?;
             let project = options.read_registry()?;
             if !project.is_registered(&label) {
                 Err(RegistryError::NotRegistered(label.clone()))?;
@@ -136,7 +134,7 @@ fn setup_logger(verbosity: Verbosity) -> Result<()> {
                 colors.color(record.level()),
                 record.target(),
                 message,
-            ))
+            ));
         })
         .chain(std::io::stderr())
         .apply()

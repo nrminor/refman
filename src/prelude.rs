@@ -1,11 +1,10 @@
-pub mod errors {
+// re-exports
+pub use crate::data::RefDataset;
+pub use crate::project::{Project, RegistryOptions};
 
-    // re-exports
-    pub use crate::data::RefDataset;
-    pub use crate::project::{Project, RegistryOptions};
+pub(crate) mod errors {
 
     use std::io;
-
     use thiserror::Error;
 
     #[derive(Debug, Error)]

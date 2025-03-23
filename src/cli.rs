@@ -47,7 +47,7 @@ pub struct Cli {
 ///
 /// The registry itself is stored as a TOML file that tracks metadata about each
 /// registered dataset, including download URLs for supported file formats like FASTA,
-/// GenBank, GFF, etc.
+/// Genbank, GFF, etc.
 #[derive(Subcommand)]
 pub enum Commands {
     #[clap(
@@ -86,7 +86,7 @@ pub enum Commands {
         #[arg(long, required = false)]
         fasta: Option<String>,
 
-        /// URL to reference sequence, potentially with annotations, in GenBank format
+        /// URL to reference sequence, potentially with annotations, in Genbank format
         #[arg(long, required = false)]
         genbank: Option<String>,
 

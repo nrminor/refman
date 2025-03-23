@@ -72,7 +72,7 @@ pub async fn request_dataset(
     let total_size = response.content_length().unwrap_or(0);
 
     // attempt to pull out the filename from the url
-    let filename = uri_to_filename(&valid_url).await?;
+    let filename = uri_to_filename(&valid_url)?;
 
     // if the response was successful, stream the file's bytes into the output file name
     if response.status().is_success() {
@@ -90,7 +90,7 @@ pub async fn request_dataset(
                 )?
                 .progress_chars("##-"),
         );
-        pb.set_message(format!("Writing data into {}...", filename));
+        pb.set_message(format!("Writing data into {filename}..."));
 
         let mut file = File::create(file_path).await?;
         let mut stream = response.bytes_stream();
@@ -107,7 +107,7 @@ pub async fn request_dataset(
                 }
             }
         }
-        pb.set_message(format!("Writing data into {}...Done!", filename));
+        pb.set_message(format!("Writing data into {filename}...Done!"));
     } else if response.status().as_u16() == 404 {
         warn!("File not found: {}", url);
     } else {
@@ -238,9 +238,8 @@ pub async fn check_url(url: &str) -> Result<Url> {
                     "The request for the provided URI, '{url}', timed out with the status code {}.",
                     code.as_str()
                 )
-            } else {
-                bail!("The request for the provided URI, '{url}', timed out without a status code.")
-            }
+            };
+            bail!("The request for the provided URI, '{url}', timed out without a status code.")
         }
         Status::Redirected(status_code) => {
             warn!(
@@ -313,16 +312,16 @@ pub async fn check_url(url: &str) -> Result<Url> {
 /// # Example URLs
 ///
 /// Valid URLs that would work:
-/// - "https://example.com/files/data.csv" -> "data.csv"
-/// - "https://example.com/downloads/dataset.zip" -> "dataset.zip"
+/// - "<https://example.com/files/data.csv>" -> "data.csv"
+/// - "<https://example.com/downloads/dataset.zip>" -> "dataset.zip"
 ///
 /// Invalid URLs that would error:
-/// - "https://example.com/" (no filename)
-/// - "https://example.com/files/" (ends in slash)
-/// - "https://example.com" (no path segments)
+/// - "<https://example.com>/" (no filename)
+/// - "<https://example.com/files>/" (ends in slash)
+/// - "<https://example.com>" (no path segments)
 #[inline]
-pub async fn uri_to_filename(url: &Url) -> Result<&str> {
-    match url.path_segments().and_then(|segments| segments.last()) {
+pub fn uri_to_filename(url: &Url) -> Result<&str> {
+    match url.path_segments().and_then(std::iter::Iterator::last) {
         Some(filename) if !filename.is_empty() => Ok(filename),
         _ => bail!(
             "Failed to extract filename from URL, which may be corrupted or may not end with the name of a file: {}",
