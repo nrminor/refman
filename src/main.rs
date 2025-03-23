@@ -31,8 +31,8 @@ async fn main() -> Result<()> {
             title,
             description,
         }) => {
-            let registry_options = RegistryOptions::try_new(title, description, registry, global)?;
-            registry_options.init()?;
+            let options = RegistryOptions::try_new(title, description, registry, global)?;
+            options.init()?;
             Ok(())
         }
 
