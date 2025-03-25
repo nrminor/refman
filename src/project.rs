@@ -302,6 +302,45 @@ impl Project {
         Ok(urls)
     }
 
+    /// Returns a vector of URLs for all reference data across all registered datasets.
+    ///
+    /// This method provides access to all file URLs registered in the project's datasets,
+    /// aggregating URLs from each dataset and each supported bioinformatics file format
+    /// (FASTA, Genbank, GFA, GFF, GTF, BED). It is useful for:
+    /// - Getting an overview of all reference data in the project
+    /// - Batch downloading all registered files
+    /// - Validating URLs across the entire registry
+    /// - Sharing/exporting full URL lists
+    ///
+    /// The method processes each dataset sequentially, collecting any non-None URLs into
+    /// a single vector. URLs are gathered in a consistent order per dataset:
+    /// FASTA -> Genbank -> GFA -> GFF -> GTF -> BED.
+    ///
+    /// Unlike `get_dataset_urls()` which operates on a single labeled dataset, this method
+    /// provides complete URL access across the entire registry. It complements other Project
+    /// methods like `download_dataset()` by enabling bulk operations across all reference data.
+    ///
+    /// The method enforces URL validity by checking that:
+    /// - No empty URLs are included
+    /// - All URLs use either http:// or https:// protocols
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(Vec<String>) containing all valid URLs across all datasets.
+    /// Returns an empty vector if no URLs are registered.
+    ///
+    /// # Errors
+    ///
+    /// Can return `EntryError` variants if:
+    /// - Dataset access fails
+    /// - URL validation fails
+    /// - Project state is invalid
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if:
+    /// - Empty URLs are found in datasets (invalid state)
+    /// - URLs with invalid protocols are found (must be http/https)
     #[inline]
     pub fn get_all_urls(&self) -> Result<Vec<String>, EntryError> {
         // access the dataset for the provided label
@@ -323,6 +362,16 @@ impl Project {
             .collect::<Vec<String>>();
             all_urls.extend(urls);
         }
+        assert!(
+            all_urls.iter().all(|url| !url.is_empty()),
+            "Found empty URLs in dataset"
+        );
+        assert!(
+            all_urls
+                .iter()
+                .all(|url| url.starts_with("http://") || url.starts_with("https://")),
+            "Found invalid URL protocols"
+        );
 
         Ok(all_urls)
     }
