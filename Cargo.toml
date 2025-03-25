@@ -1,6 +1,6 @@
 [package]
 name = "refman"
-version = "1.1.1"
+version = "1.2.0"
 edition = "2024"
 description = "A command-line manager for bespoke reference datasets used in bioinformatic analyses"
 authors = ["Nicholas Minor <nrminor@wisc.edu>"]

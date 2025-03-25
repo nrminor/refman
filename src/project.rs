@@ -302,6 +302,31 @@ impl Project {
         Ok(urls)
     }
 
+    #[inline]
+    pub fn get_all_urls(&self) -> Result<Vec<String>, EntryError> {
+        // access the dataset for the provided label
+        let datasets = self.datasets();
+
+        // build a vector based on the URLs that may or may not be available for downloading
+        let mut all_urls = Vec::new();
+        for dataset in datasets {
+            let urls = vec![
+                dataset.fasta.clone(),
+                dataset.genbank.clone(),
+                dataset.gfa.clone(),
+                dataset.gff.clone(),
+                dataset.gtf.clone(),
+                dataset.bed.clone(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<String>>();
+            all_urls.extend(urls);
+        }
+
+        Ok(all_urls)
+    }
+
     /// Checks if a dataset with a given label is registered in the project.
     ///
     /// This method searches through the project's registry to determine if a dataset
@@ -509,14 +534,28 @@ impl Project {
     /// - Multiple instances simultaneously write to the same shared progress output
     /// - The download futures report an internal thread failure
     ///
-    pub async fn download_dataset(self, label: &str, target_dir: PathBuf) -> anyhow::Result<()> {
+    pub async fn download_dataset(
+        self,
+        label: Option<&str>,
+        target_dir: PathBuf,
+    ) -> anyhow::Result<()> {
         // make a new reqwuest http client that can be shared between threads
         let shared_client = Client::new();
 
-        let urls = self.get_dataset_urls(label)?;
+        let (urls, num_to_download, message) = if let Some(label_str) = label {
+            let urls = self.get_dataset_urls(label_str)?;
+            let num_to_download = urls.len();
+            let message =
+                format!("Downloading {num_to_download} files for project labeled '{label_str}'...");
+            (urls, num_to_download, message)
+        } else {
+            let urls = self.get_all_urls()?;
+            let num_to_download = urls.len();
+            let message =
+                format!("Downloading all {num_to_download} files listed in the refman registry...");
 
-        // compute the number of files to download for introspection
-        let num_to_download = urls.len();
+            (urls, num_to_download, message)
+        };
 
         // Create a shared MultiProgress container.
         let mp = Arc::new(MultiProgress::new());
@@ -528,9 +567,7 @@ impl Project {
                 .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
                 .expect("Failed to set template"),
         );
-        toplevel_pb.set_message(format!(
-            "Downloading {num_to_download} files for project labeled '{label}'..."
-        ));
+        toplevel_pb.set_message(message);
 
         // put each download into its own tokio thread, and collect its handle into a vector
         // that can be polled downstream
@@ -1354,7 +1391,7 @@ mod tests {
 
         project = project.register(dataset).unwrap();
         let result = project
-            .download_dataset("test", temp_dir.path().to_path_buf())
+            .download_dataset(Some("test"), temp_dir.path().to_path_buf())
             .await;
 
         // Should fail since URL doesn't exist

@@ -10,7 +10,7 @@ pub const INFO: &str = r"
 █  ███  ███  ████████  ████████  █  █  ██        ██  ██    █
 █  ████  ██        ██  ████████  ████  ██  ████  ██  ███   █
 
-refman (v0.1.0)
+refman (v1.2.0)
 ------------------------------------------------------------
 `refman` is a simple command-line tool for managing biological reference datasets often
 used in bioinformatics. These datasets may include raw sequence files, files encoding
@@ -23,7 +23,7 @@ between users to aid scientific reproducibility.
 #[derive(Parser)]
 #[clap(name = "refman")]
 #[clap(about = INFO)]
-#[clap(version = "v1.1.1")]
+#[clap(version = "v1.2.0")]
 pub struct Cli {
     #[command(flatten)]
     pub verbose: clap_verbosity_flag::Verbosity,
@@ -63,7 +63,7 @@ pub enum Commands {
         #[arg(short, long, required = false)]
         description: Option<String>,
 
-        /// Optional file path (absolute or relative) to the refget registry file.
+        /// Optional file path (absolute or relative) to the refman registry file.
         #[arg(short, long, required = false)]
         registry: Option<String>,
 
@@ -106,7 +106,7 @@ pub enum Commands {
         #[arg(long, required = false)]
         bed: Option<String>,
 
-        /// Optional file path (absolute or relative) to the refget registry file.
+        /// Optional file path (absolute or relative) to the refman registry file.
         #[arg(short, long, required = false)]
         registry: Option<String>,
 
@@ -125,7 +125,7 @@ pub enum Commands {
         #[arg(index = 1, required = true)]
         label: String,
 
-        /// Optional file path (absolute or relative) to the refget registry file.
+        /// Optional file path (absolute or relative) to the refman registry file.
         #[arg(short, long, required = false)]
         registry: Option<String>,
 
@@ -143,7 +143,7 @@ pub enum Commands {
         #[arg(index = 1, required = false)]
         label: Option<String>,
 
-        /// Optional file path (absolute or relative) to the refget registry file.
+        /// Optional file path (absolute or relative) to the refman registry file.
         #[arg(short, long, required = false)]
         registry: Option<String>,
 
@@ -158,19 +158,23 @@ pub enum Commands {
     )]
     Download {
         /// Label string for a registered dataset
-        #[arg(index = 1, required = true)]
-        label: String,
+        #[arg(index = 1, required = false)]
+        label: Option<String>,
 
         /// Destination directory for downloaded files, defaulting to the current working directory.
         #[arg(short, long, required = false)]
         dest: Option<PathBuf>,
 
-        /// Optional file path (absolute or relative) to the refget registry file.
+        /// Optional file path (absolute or relative) to the refman registry file.
         #[arg(short, long, required = false)]
         registry: Option<String>,
 
         /// Whether to use a global registry as opposed to a project-specific registry
         #[arg(short, long, required = false)]
         global: bool,
+
+        /// Whether to download all datasets in the registry
+        #[arg(short, long, required = false)]
+        all: bool,
     },
 }

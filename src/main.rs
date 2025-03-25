@@ -91,18 +91,39 @@ async fn main() -> Result<()> {
             registry,
             dest,
             global,
+            all,
         }) => {
+            // setup up registry options if provided
             let options = RegistryOptions::try_new(None, None, &registry, global)?;
-            let project = options.read_registry()?;
-            if !project.is_registered(&label) {
-                Err(RegistryError::NotRegistered(label.clone()))?;
-            }
+
+            // set up the destination path
             let destination = match dest {
                 Some(dest) => dest,
                 None => env::current_dir()?,
             };
 
-            project.download_dataset(&label, destination).await?;
+            // read in the project data
+            let project = options.read_registry()?;
+
+            let Some(ref provided_label_str) = label else {
+                project.download_dataset(None, destination).await?;
+                return Ok(());
+            };
+
+            if all {
+                project
+                    .download_dataset(label.as_deref(), destination)
+                    .await?;
+                return Ok(());
+            }
+
+            if !project.is_registered(provided_label_str) {
+                Err(RegistryError::NotRegistered(provided_label_str.to_string()))?;
+            }
+
+            project
+                .download_dataset(label.as_deref(), destination)
+                .await?;
 
             Ok(())
         }
