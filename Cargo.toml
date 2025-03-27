@@ -15,17 +15,23 @@ categories = ["command-line-utilities", "science"]
 exclude = []
 
 [dependencies]
-anyhow = "1.0.97"
 clap = { version = "4.5.32", features = ["derive"] }
 clap-verbosity-flag = { version = "3.0.2" }
+color-eyre = "0.6.3"
 dirs = "6.0.0"
 fern = { version = "0.7.1", features = ["colored"] }
+flate2 = "1.1.0"
 futures = "0.3.31"
+fxhash = "0.2.1"
+gb-io = "0.8.0"
+gfa = "0.10.1"
 indicatif = { version = "0.17.11", features = ["futures", "tokio", "rayon"] }
 jiff = { version = "0.2.4", features = ["serde", "logging"] }
 log = "0.4.26"
 lychee-lib = "0.18.1"
+noodles = { version = "0.95.0", features = ["async", "bed", "core", "fasta", "gff", "gtf"] }
 prettytable = "0.10.0"
+rayon = "1.10.0"
 reqwest = { version = "0.12.14", features = ["stream"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"

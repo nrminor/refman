@@ -2,9 +2,9 @@
 
 use std::env;
 
-use anyhow::{Context, Result};
 use clap::Parser;
 use clap_verbosity_flag::Verbosity;
+use color_eyre::{Result, eyre::Context};
 use fern::colors::{Color, ColoredLevelConfig};
 use refman::{
     cli::{self, Cli, Commands},

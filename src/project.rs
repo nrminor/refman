@@ -587,7 +587,7 @@ impl Project {
         self,
         label: Option<&str>,
         target_dir: PathBuf,
-    ) -> anyhow::Result<()> {
+    ) -> color_eyre::Result<()> {
         // make a new reqwuest http client that can be shared between threads
         let shared_client = Client::new();
 

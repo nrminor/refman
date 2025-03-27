@@ -4,8 +4,55 @@ pub use crate::project::{Project, RegistryOptions};
 
 pub(crate) mod errors {
 
-    use std::io;
+    use std::{fmt, io};
     use thiserror::Error;
+
+    #[derive(Debug, Error)]
+    pub enum ValidationError {
+        #[error(
+            "The file provided for validation, `{0}`, is inaccessible, either because of insufficient read permissions or because it does not exist."
+        )]
+        InaccessibleFile(String),
+        #[error(
+            "The file provided as FASTA format, `{0}`, could not be parsed and validated in that format, and thus will not be registered."
+        )]
+        InvalidFasta(String),
+        #[error(
+            "The file provided as Genbank format, `{0}`, could not be parsed and validated in that format, and thus will not be registered."
+        )]
+        InvalidGenbank(String),
+        #[error(
+            "The file provided as GFA format, `{0}`, could not be parsed and validated in that format, and thus will not be registered."
+        )]
+        InvalidGFA(String),
+        #[error(
+            "The file provided as GFF format, `{0}`, could not be parsed and validated in that format, and thus will not be registered."
+        )]
+        InvalidGFF(String),
+        #[error(
+            "The file provided as GTF format, `{0}`, could not be parsed and validated in that format, and thus will not be registered."
+        )]
+        InvalidGTF(String),
+        #[error(
+            "The file provided as BED format, `{0}`, could not be parsed and validated in that format, and thus will not be registered. Note that BED files must at least have three columns: the reference contig ID in a corresponding FASTA file, the start coordinate, and the stop coordinate. Additional fields may be included according to the BED specification, but they are not validated here."
+        )]
+        InvalidBED(String),
+        #[error("Multiple validation errors occurred:\n{0}")]
+        MultipleErrors(MultipleValidationErrors),
+    }
+
+    #[derive(Debug)]
+    pub struct MultipleValidationErrors(pub Vec<ValidationError>);
+    impl fmt::Display for MultipleValidationErrors {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for error in &self.0 {
+                writeln!(f, "- {error}")?;
+            }
+            Ok(())
+        }
+    }
+
+    impl std::error::Error for MultipleValidationErrors {}
 
     #[derive(Debug, Error)]
     pub enum RegistryError {
@@ -56,7 +103,7 @@ pub(crate) mod errors {
         #[error(
             "The URL provided to be registered is invalid or does not point to a resource that exists."
         )]
-        InvalidURL(#[from] anyhow::Error),
+        InvalidURL(#[from] color_eyre::Report),
     }
 
     #[derive(Debug, Error)]

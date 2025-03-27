@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::{path::Path, time::Duration};
 
-use anyhow::{Result, bail};
+use color_eyre::{Result, eyre::eyre};
 use futures::StreamExt;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use log::{debug, error, info, warn};
@@ -66,7 +66,10 @@ pub async fn request_dataset(
             r
         }
         Err(e) => {
-            bail!("The request encountered an error: {:?}. Skipping.", e);
+            return Err(eyre!(
+                "The request encountered an error: {:?}. Skipping.",
+                e
+            ));
         }
     };
     let total_size = response.content_length().unwrap_or(0);
@@ -116,11 +119,11 @@ pub async fn request_dataset(
             filename,
             response.status()
         );
-        bail!(
+        return Err(eyre!(
             "Failed to download {}: HTTP {}",
             filename,
             response.status()
-        );
+        ));
     }
 
     Ok(())
@@ -172,7 +175,11 @@ async fn run_http_request(client: &Client, url: &str) -> Result<reqwest::Respons
         debug!("Downloaded successful for {}", url);
         Ok(response)
     } else {
-        bail!("Failed to download from URL {}: {}", url, response.status())
+        Err(eyre!(
+            "Failed to download from URL {}: {}",
+            url,
+            response.status()
+        ))
     }
 }
 
@@ -226,20 +233,20 @@ pub async fn check_url(url: &str) -> Result<Url> {
             let parsed_url = Url::parse(response_body.uri.as_str())?;
             Ok(parsed_url)
         }
-        Status::Error(error_kind) => {
-            bail!(
-                "An error was encountered when checking the provided URI, '{url}': {:?}",
-                error_kind
-            )
-        }
+        Status::Error(error_kind) => Err(eyre!(
+            "An error was encountered when checking the provided URI, '{url}': {:?}",
+            error_kind
+        )),
         Status::Timeout(possible_code) => {
             if let Some(code) = possible_code {
-                bail!(
+                return Err(eyre!(
                     "The request for the provided URI, '{url}', timed out with the status code {}.",
                     code.as_str()
-                )
+                ));
             };
-            bail!("The request for the provided URI, '{url}', timed out without a status code.")
+            Err(eyre!(
+                "The request for the provided URI, '{url}', timed out without a status code."
+            ))
         }
         Status::Redirected(status_code) => {
             warn!(
@@ -249,15 +256,13 @@ pub async fn check_url(url: &str) -> Result<Url> {
             let parsed_url = Url::parse(response_body.uri.as_str())?;
             Ok(parsed_url)
         }
-        Status::UnknownStatusCode(status_code) => {
-            bail!(
-                "An unknown status code was received: {:?}",
-                status_code.as_str()
-            )
-        }
-        Status::Excluded => {
-            bail!("The requested URL '{url}' has been excluded by the host.")
-        }
+        Status::UnknownStatusCode(status_code) => Err(eyre!(
+            "An unknown status code was received: {:?}",
+            status_code.as_str()
+        )),
+        Status::Excluded => Err(eyre!(
+            "The requested URL '{url}' has been excluded by the host."
+        )),
         Status::Unsupported(error_kind) => {
             warn!(
                 "The requested URL '{url}' is valid but unsupported by the validator. Proceed with downloading it at your own risk. Here's the validator error: {:?}",
@@ -323,9 +328,9 @@ pub async fn check_url(url: &str) -> Result<Url> {
 pub fn uri_to_filename(url: &Url) -> Result<&str> {
     match url.path_segments().and_then(std::iter::Iterator::last) {
         Some(filename) if !filename.is_empty() => Ok(filename),
-        _ => bail!(
+        _ => Err(eyre!(
             "Failed to extract filename from URL, which may be corrupted or may not end with the name of a file: {}",
             url
-        ),
+        )),
     }
 }

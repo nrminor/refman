@@ -1,6 +1,35 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{EntryError, downloads::check_url};
+use crate::{EntryError, downloads::check_url, validate::ValidatedFile};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum DownloadStatus {
+    NotYetDownloaded(String),
+    Downloaded(ValidatedFile),
+}
+
+impl DownloadStatus {
+    pub fn url(&self) -> &str {
+        match self {
+            DownloadStatus::NotYetDownloaded(url) => url,
+            DownloadStatus::Downloaded(validated_file) => &validated_file.uri,
+        }
+    }
+
+    pub fn is_downloaded(&self) -> bool {
+        match self {
+            DownloadStatus::NotYetDownloaded(_) => false,
+            DownloadStatus::Downloaded(_) => true,
+        }
+    }
+
+    pub fn is_validated(&self) -> bool {
+        match self {
+            DownloadStatus::NotYetDownloaded(_) => false,
+            DownloadStatus::Downloaded(validated_file) => validated_file.validated,
+        }
+    }
+}
 
 /// A structure that manages various types of data associated with a single biological reference dataset.
 /// A reference dataset typically consists of sequence files (like FASTA or Genbank)
@@ -27,10 +56,6 @@ use crate::{EntryError, downloads::check_url};
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct RefDataset {
     pub label: String,
-    // TODO: Some ideas on fields to add
-    // hash: &[u8],
-    // db_source: String,
-    // db_accession: String,
     pub fasta: Option<String>,
     pub genbank: Option<String>,
     pub gfa: Option<String>,
