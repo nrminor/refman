@@ -1,37 +1,58 @@
 #![allow(dead_code)]
 
-use std::{fs::File, io::BufReader, path::Path};
-
 use flate2::read::GzDecoder;
 use jiff::Timestamp;
+use md5::{Context, Digest};
 use noodles::{bed, fasta, gff, gtf};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
+use std::{
+    fmt::Display,
+    fs::File,
+    io::{BufReader, Read},
+    path::{Path, PathBuf},
+};
 
-use crate::{RefDataset, ValidationError};
+use crate::{RefDataset, ValidationError, data::DownloadStatus};
 
-pub struct ValidationSwitchboard {
-    num_threads: i8,
+#[derive(Debug)]
+pub(crate) enum UnvalidatedFile {
+    Fasta { uri: String, local_path: PathBuf },
+    Genbank { uri: String, local_path: PathBuf },
+    Gfa { uri: String, local_path: PathBuf },
+    Gff { uri: String, local_path: PathBuf },
+    Gtf { uri: String, local_path: PathBuf },
+    Bed { uri: String, local_path: PathBuf },
 }
 
-impl Default for ValidationSwitchboard {
-    fn default() -> Self {
-        let num_threads = 4;
-        Self { num_threads }
+impl UnvalidatedFile {
+    pub(crate) fn url(&self) -> &str {
+        match self {
+            UnvalidatedFile::Fasta { uri, .. }
+            | UnvalidatedFile::Genbank { uri, .. }
+            | UnvalidatedFile::Gfa { uri, .. }
+            | UnvalidatedFile::Gff { uri, .. }
+            | UnvalidatedFile::Gtf { uri, .. }
+            | UnvalidatedFile::Bed { uri, .. } => uri,
+        }
+    }
+    pub(crate) fn uri(&self) -> &str {
+        self.url()
+    }
+
+    pub fn set_path(&mut self, path: PathBuf) {
+        match self {
+            UnvalidatedFile::Fasta { local_path, .. }
+            | UnvalidatedFile::Genbank { local_path, .. }
+            | UnvalidatedFile::Gfa { local_path, .. }
+            | UnvalidatedFile::Gff { local_path, .. }
+            | UnvalidatedFile::Gtf { local_path, .. }
+            | UnvalidatedFile::Bed { local_path, .. } => *local_path = path,
+        }
     }
 }
 
-#[derive(Debug)]
-pub enum UnvalidatedFile<'a> {
-    Fasta { uri: &'a str, local_path: &'a Path },
-    Genbank { uri: &'a str, local_path: &'a Path },
-    GFA { uri: &'a str, local_path: &'a Path },
-    GFF { uri: &'a str, local_path: &'a Path },
-    GTF { uri: &'a str, local_path: &'a Path },
-    BED { uri: &'a str, local_path: &'a Path },
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq, Clone)]
 pub struct ValidatedFile {
     pub uri: String,
     pub validated: bool,
@@ -39,9 +60,31 @@ pub struct ValidatedFile {
     pub last_validated: Option<Timestamp>,
 }
 
+impl Display for ValidatedFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ValidatedFile {{ uri: {}, validated: {}, hash: {}, last_validated: {} }}",
+            self.uri,
+            self.validated,
+            self.hash.as_deref().unwrap_or("None"),
+            self.last_validated
+                .as_ref()
+                .map_or_else(|| "None".to_string(), std::string::ToString::to_string)
+        )
+    }
+}
+
 impl ValidatedFile {
-    pub fn try_validate(unvalidated: &UnvalidatedFile) -> Result<Self, ValidationError> {
-        let (uri, local_path) = match unvalidated {
+    pub fn checksum(&self, new_hash: Option<&str>) -> bool {
+        // TODO: Must make it return false if the old_hash is None or if the old file path doesn't exist
+        todo!()
+    }
+}
+
+impl UnvalidatedFile {
+    pub fn try_validate(&self) -> Result<ValidatedFile, ValidationError> {
+        let (uri, local_path) = match self {
             UnvalidatedFile::Fasta { uri, local_path } => {
                 try_parse_fasta(local_path)?;
                 (uri, local_path)
@@ -50,27 +93,27 @@ impl ValidatedFile {
                 try_parse_genbank(local_path)?;
                 (uri, local_path)
             }
-            UnvalidatedFile::GFA { uri, local_path } => {
+            UnvalidatedFile::Gfa { uri, local_path } => {
                 try_parse_gfa(local_path)?;
                 (uri, local_path)
             }
-            UnvalidatedFile::GFF { uri, local_path } => {
+            UnvalidatedFile::Gff { uri, local_path } => {
                 try_parse_gff(local_path)?;
                 (uri, local_path)
             }
-            UnvalidatedFile::GTF { uri, local_path } => {
+            UnvalidatedFile::Gtf { uri, local_path } => {
                 try_parse_gtf(local_path)?;
                 (uri, local_path)
             }
-            UnvalidatedFile::BED { uri, local_path } => {
+            UnvalidatedFile::Bed { uri, local_path } => {
                 try_parse_bed(local_path)?;
                 (uri, local_path)
             }
         };
-        let hash = hash_valid_download(local_path);
+        let hash = hash_valid_download(local_path).expect("");
         let timestamp = Timestamp::now();
-        let validated = Self {
-            uri: String::from(*uri),
+        let validated = ValidatedFile {
+            uri: uri.clone(),
             validated: true,
             hash: Some(hash),
             last_validated: Some(timestamp),
@@ -80,61 +123,108 @@ impl ValidatedFile {
     }
 }
 
-pub fn hash_valid_download(download: impl AsRef<Path>) -> String {
-    todo!()
+pub fn hash_valid_download(download: impl AsRef<Path>) -> Result<String, ValidationError> {
+    let Ok(file) = File::open(download.as_ref()) else {
+        return Err(ValidationError::InaccessibleFile(
+            "Unable to access downloaded file, indicating that file permissions may have changed."
+                .to_string(),
+        ));
+    };
+    let mut reader = BufReader::new(file);
+    let mut context = Context::new();
+
+    let mut buffer = [0u8; 64 * 1024]; // 64 KB buffer size, adjust as needed
+
+    loop {
+        let Ok(bytes_read) = reader.read(&mut buffer) else {
+            return Err(ValidationError::InaccessibleFile(
+                "Unable to access downloaded file, indicating that file permissions may have changed."
+                    .to_string(),
+            ));
+        };
+        if bytes_read == 0 {
+            break; // EOF reached
+        }
+        context.consume(&buffer[..bytes_read]);
+    }
+
+    let computed: Digest = context.compute();
+    let computed_hex = format!("{computed:x}");
+
+    Ok(computed_hex)
 }
 
 #[allow(clippy::similar_names)]
 pub fn validate_files(dataset: &RefDataset) -> Result<(), ValidationError> {
     #[inline]
-    fn fasta_callback(dataset_fasta: Option<&str>) -> Result<(), ValidationError> {
+    fn fasta_callback(dataset_fasta: Option<&DownloadStatus>) -> Result<(), ValidationError> {
         match dataset_fasta {
-            Some(file) => try_parse_fasta(file),
+            Some(status) => match status {
+                DownloadStatus::NotYetDownloaded(_) => Ok(()),
+                DownloadStatus::Downloaded(validated_file) => try_parse_fasta(&validated_file.uri),
+            },
             None => Ok(()),
         }
     }
     #[inline]
-    fn genbank_callback(dataset_genbank: Option<&str>) -> Result<(), ValidationError> {
+    fn genbank_callback(dataset_genbank: Option<&DownloadStatus>) -> Result<(), ValidationError> {
         match dataset_genbank {
-            Some(file) => try_parse_genbank(file),
+            Some(status) => match status {
+                DownloadStatus::NotYetDownloaded(_) => Ok(()),
+                DownloadStatus::Downloaded(validated_file) => {
+                    try_parse_genbank(&validated_file.uri)
+                }
+            },
             None => Ok(()),
         }
     }
     #[inline]
-    fn gfa_callback(dataset_gfa: Option<&str>) -> Result<(), ValidationError> {
+    fn gfa_callback(dataset_gfa: Option<&DownloadStatus>) -> Result<(), ValidationError> {
         match dataset_gfa {
-            Some(file) => try_parse_gfa(file),
+            Some(status) => match status {
+                DownloadStatus::NotYetDownloaded(_) => Ok(()),
+                DownloadStatus::Downloaded(validated_file) => try_parse_gfa(&validated_file.uri),
+            },
             None => Ok(()),
         }
     }
     #[inline]
-    fn gff_callback(dataset_gff: Option<&str>) -> Result<(), ValidationError> {
+    fn gff_callback(dataset_gff: Option<&DownloadStatus>) -> Result<(), ValidationError> {
         match dataset_gff {
-            Some(file) => try_parse_gff(file),
+            Some(status) => match status {
+                DownloadStatus::NotYetDownloaded(_) => Ok(()),
+                DownloadStatus::Downloaded(validated_file) => try_parse_gff(&validated_file.uri),
+            },
             None => Ok(()),
         }
     }
     #[inline]
-    fn gtf_callback(dataset_gtf: Option<&str>) -> Result<(), ValidationError> {
+    fn gtf_callback(dataset_gtf: Option<&DownloadStatus>) -> Result<(), ValidationError> {
         match dataset_gtf {
-            Some(file) => try_parse_gtf(file),
+            Some(status) => match status {
+                DownloadStatus::NotYetDownloaded(_) => Ok(()),
+                DownloadStatus::Downloaded(validated_file) => try_parse_gtf(&validated_file.uri),
+            },
             None => Ok(()),
         }
     }
     #[inline]
-    fn bed_callback(dataset_bed: Option<&str>) -> Result<(), ValidationError> {
+    fn bed_callback(dataset_bed: Option<&DownloadStatus>) -> Result<(), ValidationError> {
         match dataset_bed {
-            Some(file) => try_parse_bed(file),
+            Some(status) => match status {
+                DownloadStatus::NotYetDownloaded(_) => Ok(()),
+                DownloadStatus::Downloaded(validated_file) => try_parse_bed(&validated_file.uri),
+            },
             None => Ok(()),
         }
     }
     let validation_callbacks = vec![
-        fasta_callback(dataset.fasta.as_deref()),
-        genbank_callback(dataset.genbank.as_deref()),
-        gfa_callback(dataset.gfa.as_deref()),
-        gff_callback(dataset.gff.as_deref()),
-        gtf_callback(dataset.gtf.as_deref()),
-        bed_callback(dataset.bed.as_deref()),
+        fasta_callback(dataset.fasta.as_ref()),
+        genbank_callback(dataset.genbank.as_ref()),
+        gfa_callback(dataset.gfa.as_ref()),
+        gff_callback(dataset.gff.as_ref()),
+        gtf_callback(dataset.gtf.as_ref()),
+        bed_callback(dataset.bed.as_ref()),
     ]
     .into_par_iter()
     .filter_map(std::result::Result::err)

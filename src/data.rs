@@ -1,18 +1,59 @@
+use std::{fmt::Display, path::PathBuf};
+
 use serde::{Deserialize, Serialize};
 
-use crate::{EntryError, downloads::check_url, validate::ValidatedFile};
+use crate::{
+    EntryError, ValidationError,
+    downloads::check_url,
+    validate::{UnvalidatedFile, ValidatedFile},
+};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(untagged)]
 pub enum DownloadStatus {
     NotYetDownloaded(String),
     Downloaded(ValidatedFile),
 }
 
+impl Default for DownloadStatus {
+    fn default() -> Self {
+        DownloadStatus::NotYetDownloaded(String::new())
+    }
+}
+
+impl Display for DownloadStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DownloadStatus::NotYetDownloaded(undownloaded) => {
+                write!(f, "NotYetDownloaded: {undownloaded}")
+            }
+            DownloadStatus::Downloaded(validated_file) => {
+                write!(f, "Downloaded: {validated_file}")
+            }
+        }
+    }
+}
+
 impl DownloadStatus {
+    pub fn new(file: String) -> Self {
+        DownloadStatus::NotYetDownloaded(file)
+    }
+
+    pub fn new_downloaded(file: ValidatedFile) -> Self {
+        Self::Downloaded(file)
+    }
+
     pub fn url(&self) -> &str {
         match self {
             DownloadStatus::NotYetDownloaded(url) => url,
             DownloadStatus::Downloaded(validated_file) => &validated_file.uri,
+        }
+    }
+
+    pub fn url_owned(&self) -> String {
+        match self {
+            DownloadStatus::NotYetDownloaded(url) => url.to_owned(),
+            DownloadStatus::Downloaded(validated_file) => validated_file.uri.clone(),
         }
     }
 
@@ -53,15 +94,16 @@ impl DownloadStatus {
 /// Files are stored as optional strings, typically representing paths or identifiers to the actual
 /// data. This allows for flexible dataset configurations while maintaining data integrity through
 /// the `try_new()` constructor.
-#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct RefDataset {
     pub label: String,
-    pub fasta: Option<String>,
-    pub genbank: Option<String>,
-    pub gfa: Option<String>,
-    pub gff: Option<String>,
-    pub gtf: Option<String>,
-    pub bed: Option<String>,
+    // TODO: Replace the strings with the `DownloadStatus` enum
+    pub fasta: Option<DownloadStatus>,
+    pub genbank: Option<DownloadStatus>,
+    pub gfa: Option<DownloadStatus>,
+    pub gff: Option<DownloadStatus>,
+    pub gtf: Option<DownloadStatus>,
+    pub bed: Option<DownloadStatus>,
 }
 
 impl RefDataset {
@@ -142,25 +184,53 @@ impl RefDataset {
             // If none of the above conditions are met, we're all good! Return an instance of the `RefDataset` struct
             // with validated combinations of fields.
             _ => {
-                // check each of the possible files, if provided by the user
-                if let Some(url_to_check) = &fasta {
-                    let _ = check_url(url_to_check).await?;
-                }
-                if let Some(url_to_check) = &genbank {
-                    let _ = check_url(url_to_check).await?;
-                }
-                if let Some(url_to_check) = &gfa {
-                    let _ = check_url(url_to_check).await?;
-                }
-                if let Some(url_to_check) = &gff {
-                    let _ = check_url(url_to_check).await?;
-                }
-                if let Some(url_to_check) = &gtf {
-                    let _ = check_url(url_to_check).await?;
-                }
-                if let Some(url_to_check) = &bed {
-                    let _ = check_url(url_to_check).await?;
-                }
+                // check each of the possible files, if provided by the user. If all are successful, initialize each
+                // file name wrapped in a `DownloadStatus` `NotYetDownloaded` variant, which preserves backwards
+                // compatibility with the `refman.toml` format and controls the valid ways state can be updated in the
+                // `refman` register-download-validate workflow. We'll just use variable shadowing here instead of
+                // binding new variables.
+                let fasta = if let Some(url_to_check) = fasta {
+                    let _ = check_url(&url_to_check).await?;
+                    let status = DownloadStatus::new(url_to_check);
+                    Some(status)
+                } else {
+                    None
+                };
+                let genbank = if let Some(url_to_check) = genbank {
+                    let _ = check_url(&url_to_check).await?;
+                    let status = DownloadStatus::new(url_to_check);
+                    Some(status)
+                } else {
+                    None
+                };
+                let gfa = if let Some(url_to_check) = gfa {
+                    let _ = check_url(&url_to_check).await?;
+                    let status = DownloadStatus::new(url_to_check);
+                    Some(status)
+                } else {
+                    None
+                };
+                let gff = if let Some(url_to_check) = gff {
+                    let _ = check_url(&url_to_check).await?;
+                    let status = DownloadStatus::new(url_to_check);
+                    Some(status)
+                } else {
+                    None
+                };
+                let gtf = if let Some(url_to_check) = gtf {
+                    let _ = check_url(&url_to_check).await?;
+                    let status = DownloadStatus::new(url_to_check);
+                    Some(status)
+                } else {
+                    None
+                };
+                let bed = if let Some(url_to_check) = bed {
+                    let _ = check_url(&url_to_check).await?;
+                    let status = DownloadStatus::new(url_to_check);
+                    Some(status)
+                } else {
+                    None
+                };
 
                 // If all provided URLs are valid, set up an instance of a registry
                 Ok(Self {
@@ -174,5 +244,214 @@ impl RefDataset {
                 })
             }
         }
+    }
+
+    pub(crate) fn get_fasta_download(&self) -> Option<UnvalidatedFile> {
+        // resolve state for each of the files
+        match &self.fasta {
+            Some(file) => match file {
+                DownloadStatus::NotYetDownloaded(uri) => {
+                    let unvalidated = UnvalidatedFile::Fasta {
+                        uri: uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                }
+                DownloadStatus::Downloaded(validated_file) => {
+                    let old_hash = &validated_file.hash;
+                    if old_hash.is_some() {
+                        None
+                    } else {
+                        let unvalidated = UnvalidatedFile::Fasta {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        };
+                        Some(unvalidated)
+                    }
+                }
+            },
+            None => None,
+        }
+    }
+
+    pub(crate) fn get_genbank_download(&self) -> Option<UnvalidatedFile> {
+        match &self.genbank {
+            Some(file) => match file {
+                DownloadStatus::NotYetDownloaded(uri) => {
+                    let unvalidated = UnvalidatedFile::Genbank {
+                        uri: uri.to_string(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                }
+                DownloadStatus::Downloaded(validated_file) => {
+                    let old_hash = &validated_file.hash;
+                    if old_hash.is_some() {
+                        None
+                    } else {
+                        let unvalidated = UnvalidatedFile::Genbank {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        };
+                        Some(unvalidated)
+                    }
+                }
+            },
+            None => None,
+        }
+    }
+
+    pub(crate) fn get_gfa_download(&self) -> Option<UnvalidatedFile> {
+        match &self.gfa {
+            Some(file) => match file {
+                DownloadStatus::NotYetDownloaded(uri) => {
+                    let unvalidated = UnvalidatedFile::Gfa {
+                        uri: uri.to_string(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                }
+                DownloadStatus::Downloaded(validated_file) => {
+                    let old_hash = &validated_file.hash;
+                    if old_hash.is_some() {
+                        None
+                    } else {
+                        let unvalidated = UnvalidatedFile::Gfa {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        };
+                        Some(unvalidated)
+                    }
+                }
+            },
+            None => None,
+        }
+    }
+
+    pub(crate) fn get_gff_download(&self) -> Option<UnvalidatedFile> {
+        match &self.gff {
+            Some(file) => match file {
+                DownloadStatus::NotYetDownloaded(uri) => {
+                    let unvalidated = UnvalidatedFile::Gff {
+                        uri: uri.to_string(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                }
+                DownloadStatus::Downloaded(validated_file) => {
+                    let old_hash = &validated_file.hash;
+                    if old_hash.is_some() {
+                        None
+                    } else {
+                        let unvalidated = UnvalidatedFile::Gff {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        };
+                        Some(unvalidated)
+                    }
+                }
+            },
+            None => None,
+        }
+    }
+
+    pub(crate) fn get_gtf_download(&self) -> Option<UnvalidatedFile> {
+        match &self.gtf {
+            Some(file) => match file {
+                DownloadStatus::NotYetDownloaded(uri) => {
+                    let unvalidated = UnvalidatedFile::Gtf {
+                        uri: uri.to_string(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                }
+                DownloadStatus::Downloaded(validated_file) => {
+                    let old_hash = &validated_file.hash;
+                    if old_hash.is_some() {
+                        None
+                    } else {
+                        let unvalidated = UnvalidatedFile::Gtf {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        };
+                        Some(unvalidated)
+                    }
+                }
+            },
+            None => None,
+        }
+    }
+
+    pub(crate) fn get_bed_download(&self) -> Option<UnvalidatedFile> {
+        match &self.bed {
+            Some(file) => match file {
+                DownloadStatus::NotYetDownloaded(uri) => {
+                    let unvalidated = UnvalidatedFile::Bed {
+                        uri: uri.to_string(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                }
+                DownloadStatus::Downloaded(validated_file) => {
+                    let old_hash = &validated_file.hash;
+                    if old_hash.is_some() {
+                        None
+                    } else {
+                        let unvalidated = UnvalidatedFile::Bed {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        };
+                        Some(unvalidated)
+                    }
+                }
+            },
+            None => None,
+        }
+    }
+
+    pub fn validate_download(
+        &mut self,
+        downloaded_file: &UnvalidatedFile,
+    ) -> Result<(), ValidationError> {
+        match downloaded_file {
+            UnvalidatedFile::Fasta { .. } => {
+                let validated = downloaded_file.try_validate()?;
+                let updated_status = DownloadStatus::new_downloaded(validated);
+
+                self.fasta = Some(updated_status);
+            }
+            UnvalidatedFile::Genbank { .. } => {
+                let validated = downloaded_file.try_validate()?;
+                let updated_status = DownloadStatus::new_downloaded(validated);
+
+                self.genbank = Some(updated_status);
+            }
+            UnvalidatedFile::Gfa { .. } => {
+                let validated = downloaded_file.try_validate()?;
+                let updated_status = DownloadStatus::new_downloaded(validated);
+
+                self.gfa = Some(updated_status);
+            }
+            UnvalidatedFile::Gff { .. } => {
+                let validated = downloaded_file.try_validate()?;
+                let updated_status = DownloadStatus::new_downloaded(validated);
+
+                self.gff = Some(updated_status);
+            }
+            UnvalidatedFile::Gtf { .. } => {
+                let validated = downloaded_file.try_validate()?;
+                let updated_status = DownloadStatus::new_downloaded(validated);
+
+                self.gtf = Some(updated_status);
+            }
+            UnvalidatedFile::Bed { .. } => {
+                let validated = downloaded_file.try_validate()?;
+                let updated_status = DownloadStatus::new_downloaded(validated);
+
+                self.bed = Some(updated_status);
+            }
+        }
+
+        Ok(())
     }
 }

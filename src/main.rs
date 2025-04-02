@@ -106,14 +106,16 @@ async fn main() -> Result<()> {
             let project = options.read_registry()?;
 
             let Some(ref provided_label_str) = label else {
-                project.download_dataset(None, destination).await?;
+                let mut updated_project = project.download_dataset(None, destination).await?;
+                options.write_registry(&mut updated_project)?;
                 return Ok(());
             };
 
             if all {
-                project
+                let mut updated_project = project
                     .download_dataset(label.as_deref(), destination)
                     .await?;
+                options.write_registry(&mut updated_project)?;
                 return Ok(());
             }
 
@@ -121,9 +123,10 @@ async fn main() -> Result<()> {
                 Err(RegistryError::NotRegistered(provided_label_str.to_string()))?;
             }
 
-            project
+            let mut updated_project = project
                 .download_dataset(label.as_deref(), destination)
                 .await?;
+            options.write_registry(&mut updated_project)?;
 
             Ok(())
         }

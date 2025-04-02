@@ -29,6 +29,7 @@ indicatif = { version = "0.17.11", features = ["futures", "tokio", "rayon"] }
 jiff = { version = "0.2.4", features = ["serde", "logging"] }
 log = "0.4.26"
 lychee-lib = "0.18.1"
+md5 = "0.7.0"
 noodles = { version = "0.95.0", features = ["async", "bed", "core", "fasta", "gff", "gtf"] }
 prettytable = "0.10.0"
 rayon = "1.10.0"

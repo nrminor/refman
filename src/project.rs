@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env::{self, current_dir},
     fs::{self, File, read_to_string},
     path::PathBuf,
@@ -6,15 +7,22 @@ use std::{
     sync::Arc,
 };
 
-use futures::{StreamExt, stream::FuturesUnordered};
+use color_eyre::eyre::Error as ColorError;
+use futures::future::try_join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use jiff::Timestamp;
 use log::{debug, info, warn};
 use prettytable::{Table, row};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinHandle;
 
-use crate::{EntryError, RegistryError, data::RefDataset, downloads::request_dataset};
+use crate::{
+    EntryError, RegistryError, ValidationError,
+    data::{DownloadStatus, RefDataset},
+    downloads::request_dataset,
+    validate::UnvalidatedFile,
+};
 
 /// A reference manager for all data associated with your bioinformatics project.
 ///
@@ -55,6 +63,8 @@ use crate::{EntryError, RegistryError, data::RefDataset, downloads::request_data
 pub struct Project {
     project: Registry,
 }
+
+type MultiDownloadResults = Vec<Result<UnvalidatedFile, ColorError>>;
 
 impl Project {
     /// Creates a new Project struct with optional title and description strings and
@@ -297,6 +307,7 @@ impl Project {
         ]
         .into_iter()
         .flatten()
+        .map(|download| download.url_owned())
         .collect::<Vec<String>>();
 
         Ok(urls)
@@ -359,6 +370,7 @@ impl Project {
             ]
             .into_iter()
             .flatten()
+            .map(|download| download.url_owned())
             .collect::<Vec<String>>();
             all_urls.extend(urls);
         }
@@ -536,6 +548,41 @@ impl Project {
         Ok(self)
     }
 
+    #[allow(clippy::similar_names)]
+    pub(crate) fn get_downloads_per_dataset(
+        &self,
+        label: Option<&str>,
+    ) -> Vec<(RefDataset, Vec<UnvalidatedFile>)> {
+        let datasets = if let Some(label) = label {
+            self.clone()
+                .datasets_owned()
+                .into_iter()
+                .filter(|dataset| dataset.label == label)
+                .collect::<Vec<_>>()
+        } else {
+            self.clone()
+                .datasets_owned()
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        datasets
+            .into_iter()
+            .map(|dataset| {
+                let fasta = dataset.get_fasta_download();
+                let genbank = dataset.get_genbank_download();
+                let gfa = dataset.get_gfa_download();
+                let gtf = dataset.get_gtf_download();
+                let gff = dataset.get_gff_download();
+                let bed = dataset.get_bed_download();
+                let files = vec![fasta, genbank, gfa, gff, gtf, bed]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>();
+                (dataset, files)
+            })
+            .collect::<Vec<_>>()
+    }
+
     /// Downloads a reference dataset from a Project's registry by label, fetching any registered file
     /// URLs into a target directory.
     ///
@@ -583,27 +630,27 @@ impl Project {
     /// - Multiple instances simultaneously write to the same shared progress output
     /// - The download futures report an internal thread failure
     ///
+    #[allow(clippy::too_many_lines)]
     pub async fn download_dataset(
         self,
         label: Option<&str>,
         target_dir: PathBuf,
-    ) -> color_eyre::Result<()> {
-        // make a new reqwuest http client that can be shared between threads
+    ) -> color_eyre::Result<Self> {
+        // make a new reqwest http client that can be shared between threads
         let shared_client = Client::new();
 
-        let (urls, num_to_download, message) = if let Some(label_str) = label {
-            let urls = self.get_dataset_urls(label_str)?;
-            let num_to_download = urls.len();
-            let message =
-                format!("Downloading {num_to_download} files for project labeled '{label_str}'...");
-            (urls, num_to_download, message)
-        } else {
-            let urls = self.get_all_urls()?;
-            let num_to_download = urls.len();
-            let message =
-                format!("Downloading all {num_to_download} files listed in the refman registry...");
+        // pull in the sets of files to be downloaded
+        let dataset_files = self.get_downloads_per_dataset(label);
 
-            (urls, num_to_download, message)
+        // count the files to generate a message to inform the user of what will be downloaded
+        let mut num_to_download = 0;
+        for (_, files) in &dataset_files {
+            num_to_download += files.len();
+        }
+        let message = if let Some(label_str) = label {
+            format!("Downloading {num_to_download} files for project labeled '{label_str}'...")
+        } else {
+            format!("Downloading all {num_to_download} files listed in the refman registry...")
         };
 
         // Create a shared MultiProgress container.
@@ -620,36 +667,139 @@ impl Project {
 
         // put each download into its own tokio thread, and collect its handle into a vector
         // that can be polled downstream
-        let mut task_handles = Vec::with_capacity(urls.len());
-        for url in urls {
-            let thread_local_client = shared_client.clone();
-            let thread_local_dir = target_dir.clone();
+        let mut dataset_task_handles: Vec<
+            JoinHandle<Result<(RefDataset, MultiDownloadResults), ColorError>>,
+        > = Vec::with_capacity(num_to_download);
+        for (dataset, files) in dataset_files {
+            let shared_client = shared_client.clone();
+            let target_dir = target_dir.clone();
             let mp = mp.clone();
-            let handle = tokio::spawn(async move {
-                request_dataset(&url, thread_local_client, &thread_local_dir, mp).await
+
+            // Spawn a task per dataset
+            let handle: JoinHandle<_> = tokio::spawn(async move {
+                // Inside this task: spawn parallel tasks for each file
+                let file_task_handles = files.into_iter().map(|file| {
+                    let client = shared_client.clone();
+                    let dir = target_dir.clone();
+                    let mp = mp.clone();
+
+                    tokio::spawn(async move { request_dataset(file, client, &dir, mp).await })
+                });
+
+                // Await all file downloads for this dataset
+                let file_results = try_join_all(file_task_handles).await?;
+
+                Ok((dataset, file_results))
             });
-            task_handles.push(handle);
+
+            dataset_task_handles.push(handle);
         }
 
-        let mut futures = FuturesUnordered::new();
-        for handle in task_handles {
-            futures.push(handle);
-        }
-
-        while let Some(task_attempt) = futures.next().await {
-            match task_attempt {
-                Ok(download_attempt) => download_attempt,
-                Err(thread_error) => Err(thread_error)?,
-            }?;
-            toplevel_pb.inc(1);
-        }
+        let updated_datasets: Vec<RefDataset> = try_join_all(dataset_task_handles)
+            .await?
+            .into_iter()
+            .filter_map(|dataset_result| {
+                toplevel_pb.inc(1);
+                match dataset_result {
+                    Ok((dataset, file_results)) => {
+                        match file_results.into_iter().collect::<Result<Vec<_>, _>>() {
+                            Ok(successful_files) => Some((dataset, successful_files)),
+                            Err(msg) => {
+                                warn!("Failed to download files because of this error: {}", msg);
+                                None
+                            }
+                        }
+                    }
+                    Err(msg) => {
+                        warn!("Failed to download files because of this error: {}", msg);
+                        None
+                    }
+                }
+            })
+            .flat_map(
+                |(mut dataset, files)| -> Result<RefDataset, ValidationError> {
+                    for file in files {
+                        match file {
+                            UnvalidatedFile::Fasta { .. } => {
+                                let validated = file.try_validate()?;
+                                let complete_download = DownloadStatus::new_downloaded(validated);
+                                dataset.fasta = Some(complete_download);
+                            }
+                            UnvalidatedFile::Genbank { .. } => {
+                                let validated = file.try_validate()?;
+                                let complete_download = DownloadStatus::new_downloaded(validated);
+                                dataset.genbank = Some(complete_download);
+                            }
+                            UnvalidatedFile::Gfa { .. } => {
+                                let validated = file.try_validate()?;
+                                let complete_download = DownloadStatus::new_downloaded(validated);
+                                dataset.gfa = Some(complete_download);
+                            }
+                            UnvalidatedFile::Gff { .. } => {
+                                let validated = file.try_validate()?;
+                                let complete_download = DownloadStatus::new_downloaded(validated);
+                                dataset.gff = Some(complete_download);
+                            }
+                            UnvalidatedFile::Gtf { .. } => {
+                                let validated = file.try_validate()?;
+                                let complete_download = DownloadStatus::new_downloaded(validated);
+                                dataset.gtf = Some(complete_download);
+                            }
+                            UnvalidatedFile::Bed { .. } => {
+                                let validated = file.try_validate()?;
+                                let complete_download = DownloadStatus::new_downloaded(validated);
+                                dataset.bed = Some(complete_download);
+                            }
+                        };
+                    }
+                    Ok(dataset)
+                },
+            )
+            .collect();
 
         // Once all downloads finish, update and finish the overall progress bar.
         toplevel_pb.finish_with_message(format!(
             "Done! {num_to_download} files successfully downloaded to {target_dir:?}."
         ));
 
-        Ok(())
+        // Update the project and return it
+        let updated_project = self.update_registry(&updated_datasets);
+        Ok(updated_project)
+    }
+
+    #[must_use]
+    pub fn update_registry(self, new_datasets: &[RefDataset]) -> Project {
+        // make a hashmap of the old datasets and new datasets we can compare for available updates
+        let old_datasets: HashMap<&str, &RefDataset> = self
+            .datasets()
+            .iter()
+            .map(|dataset| (dataset.label.as_str(), dataset))
+            .collect();
+        let updated_datasets: HashMap<&str, &RefDataset> = new_datasets
+            .iter()
+            .map(|dataset| (dataset.label.as_str(), dataset))
+            .collect();
+
+        // if a key in the old dataset is also in a new dataset, swap in the new data
+        let merged_datasets: Vec<RefDataset> = old_datasets
+            .into_iter()
+            .map(|(label, dataset)| match updated_datasets.get(label) {
+                Some(aha) => (*aha).to_owned(),
+                None => dataset.clone(),
+            })
+            .collect();
+
+        // use Rust's nice struct update syntax to create a new registry
+        let updated_registry = Registry {
+            datasets: merged_datasets,
+            last_modified: Timestamp::now(),
+            ..self.project
+        };
+
+        // return a new instance of the project in functional style
+        Self {
+            project: updated_registry,
+        }
     }
 
     /// Removes a dataset from the Project's registry by its label.
@@ -715,6 +865,151 @@ impl Project {
         Ok(self)
     }
 
+    fn print_single_label_data(self, label: &str) {
+        let datasets = self.datasets();
+        let dataset: Vec<_> = datasets
+            .iter()
+            .filter(|dataset| dataset.label == label)
+            .collect();
+        assert_eq!(
+            dataset.len(),
+            1,
+            "No project with the label '{label}' has been registered. Run `refman list` without the label to see which datasets are registered."
+        );
+        let unwrapped_dataset = dataset[0];
+
+        eprintln!("URLs registered for {label}:");
+        eprintln!("--------------------{}", "-".repeat(label.len()));
+        eprintln!(
+            " - FASTA: {}",
+            unwrapped_dataset
+                .fasta
+                .clone()
+                .unwrap_or(DownloadStatus::default())
+        );
+        eprintln!(
+            " - Genbank: {}",
+            unwrapped_dataset
+                .genbank
+                .clone()
+                .unwrap_or(DownloadStatus::default())
+        );
+        eprintln!(
+            " - GFA: {}",
+            unwrapped_dataset
+                .gfa
+                .clone()
+                .unwrap_or(DownloadStatus::default())
+        );
+        eprintln!(
+            " - GFF: {}",
+            unwrapped_dataset
+                .gff
+                .clone()
+                .unwrap_or(DownloadStatus::default())
+        );
+        eprintln!(
+            " - GTF: {}",
+            unwrapped_dataset
+                .gtf
+                .clone()
+                .unwrap_or(DownloadStatus::default())
+        );
+        eprintln!(
+            " - BED: {}",
+            unwrapped_dataset
+                .bed
+                .clone()
+                .unwrap_or(DownloadStatus::default())
+        );
+    }
+
+    fn print_all_labels(self) {
+        // print a title field if it has been set
+        let title_field = &self.project.title;
+        if let Some(title) = title_field {
+            info!("Showing available data registered for {title}:");
+        }
+
+        // make a new mutable instance of a pretty table to be appended to
+        let mut pretty_table = Table::new();
+
+        // add the title row
+        pretty_table.add_row(row![
+            "Label", "FASTA", "Genbank", "GFA", "GFF", "GTF", "BED"
+        ]);
+
+        // add rows for each dataset
+        let datasets = self.datasets();
+        for dataset in datasets {
+            pretty_table.add_row(row![
+                dataset.label,
+                abbreviate_str(
+                    dataset
+                        .fasta
+                        .clone()
+                        .unwrap_or(DownloadStatus::default())
+                        .url_owned(),
+                    20,
+                    8,
+                    25
+                ),
+                abbreviate_str(
+                    dataset
+                        .genbank
+                        .clone()
+                        .unwrap_or(DownloadStatus::default())
+                        .url_owned(),
+                    20,
+                    8,
+                    25
+                ),
+                abbreviate_str(
+                    dataset
+                        .gfa
+                        .clone()
+                        .unwrap_or(DownloadStatus::default())
+                        .url_owned(),
+                    20,
+                    8,
+                    25
+                ),
+                abbreviate_str(
+                    dataset
+                        .gff
+                        .clone()
+                        .unwrap_or(DownloadStatus::default())
+                        .url_owned(),
+                    20,
+                    8,
+                    25
+                ),
+                abbreviate_str(
+                    dataset
+                        .gtf
+                        .clone()
+                        .unwrap_or(DownloadStatus::default())
+                        .url_owned(),
+                    20,
+                    8,
+                    25
+                ),
+                abbreviate_str(
+                    dataset
+                        .bed
+                        .clone()
+                        .unwrap_or(DownloadStatus::default())
+                        .url_owned(),
+                    20,
+                    8,
+                    25
+                ),
+            ]);
+        }
+
+        pretty_table.printstd();
+    }
+
     /// Pretty prints the currently registered datasets in a tabular format.
     ///
     /// This method provides a human-readable view of all reference datasets currently registered
@@ -752,7 +1047,7 @@ impl Project {
     /// # Notes
     ///
     /// The output is meant for human consumption and formatted for readability. For
-    /// programmatic access to dataset information, use the `datasets()` o`datasets_owned()`
+    /// programmatic access to dataset information, use the `datasets()` or `datasets_owned()`
     /// methods instead.
     ///
     /// # Panics
@@ -762,77 +1057,14 @@ impl Project {
     /// - A requested dataset label does not exist when filtering registered datasets
     /// - The prettytable crate encounters an error when printing the output table
     pub fn prettyprint(self, label: Option<String>) {
+        // if the user requested a label, just print the information for that label
         if let Some(label_str) = label {
-            let datasets = self.datasets();
-            let dataset: Vec<_> = datasets
-                .iter()
-                .filter(|dataset| dataset.label == label_str)
-                .collect();
-            assert_eq!(
-                dataset.len(),
-                1,
-                "No project with the label '{label_str}' has been registered. Run `refman list` without the label to see which datasets are registered."
-            );
-            let unwrapped_dataset = dataset[0];
-
-            eprintln!("URLs registered for {label_str}:");
-            eprintln!("--------------------{}", "-".repeat(label_str.len()));
-            eprintln!(
-                " - FASTA: {}",
-                unwrapped_dataset.fasta.clone().unwrap_or(String::new())
-            );
-            eprintln!(
-                " - Genbank: {}",
-                unwrapped_dataset.genbank.clone().unwrap_or(String::new())
-            );
-            eprintln!(
-                " - GFA: {}",
-                unwrapped_dataset.gfa.clone().unwrap_or(String::new())
-            );
-            eprintln!(
-                " - GFF: {}",
-                unwrapped_dataset.gff.clone().unwrap_or(String::new())
-            );
-            eprintln!(
-                " - GTF: {}",
-                unwrapped_dataset.gtf.clone().unwrap_or(String::new())
-            );
-            eprintln!(
-                " - BED: {}",
-                unwrapped_dataset.bed.clone().unwrap_or(String::new())
-            );
-
+            self.print_single_label_data(&label_str);
             return;
         }
-        // print a title field if it has been set
-        let title_field = &self.project.title;
-        if let Some(title) = title_field {
-            info!("Showing available data registered for {title}:");
-        }
 
-        // make a new mutable instance of a pretty table to be appended to
-        let mut pretty_table = Table::new();
-
-        // add the title row
-        pretty_table.add_row(row![
-            "Label", "FASTA", "Genbank", "GFA", "GFF", "GTF", "BED"
-        ]);
-
-        // add rows for each dataset
-        let datasets = self.datasets();
-        for dataset in datasets {
-            pretty_table.add_row(row![
-                dataset.label,
-                abbreviate_str(dataset.fasta.clone().unwrap_or(String::new()), 20, 8, 25),
-                abbreviate_str(dataset.genbank.clone().unwrap_or(String::new()), 20, 8, 25),
-                abbreviate_str(dataset.gfa.clone().unwrap_or(String::new()), 20, 8, 25),
-                abbreviate_str(dataset.gff.clone().unwrap_or(String::new()), 20, 8, 25),
-                abbreviate_str(dataset.gtf.clone().unwrap_or(String::new()), 20, 8, 25),
-                abbreviate_str(dataset.bed.clone().unwrap_or(String::new()), 20, 8, 25),
-            ]);
-        }
-
-        pretty_table.printstd();
+        // otherwise, print all datasets as a table
+        self.print_all_labels();
     }
 }
 
@@ -1287,7 +1519,6 @@ fn set_refman_home(desired_dir: &str) {
 mod tests {
     use super::*;
     use tempfile::tempdir;
-    use tokio;
 
     #[test]
     fn test_new_project() {
@@ -1306,104 +1537,15 @@ mod tests {
         let mut project = Project::new(None, None, false);
         let dataset = RefDataset {
             label: "test_genome".into(),
-            fasta: Some("https://example.com/genome.fasta".into()),
+            fasta: Some(DownloadStatus::new(
+                "https://example.com/genome.fasta".to_string(),
+            )),
             ..Default::default()
         };
 
         project = project.register(dataset).unwrap();
         assert!(project.is_registered("test_genome"));
         assert!(!project.is_registered("nonexistent"));
-    }
-
-    #[test]
-    fn test_register_new_dataset() {
-        let mut project = Project::new(None, None, false);
-        let dataset = RefDataset {
-            label: "test_genome".into(),
-            fasta: Some("https://example.com/genome.fasta".into()),
-            genbank: Some("https://example.com/genome.gb".into()),
-            ..Default::default()
-        };
-
-        project = project.register(dataset.clone()).unwrap();
-        assert_eq!(project.datasets().len(), 1);
-        assert_eq!(project.datasets()[0], dataset);
-    }
-
-    #[test]
-    fn test_update_existing_dataset() {
-        let mut project = Project::new(None, None, false);
-        let dataset1 = RefDataset {
-            label: "test_genome".into(),
-            fasta: Some("https://example.com/old.fasta".into()),
-            ..Default::default()
-        };
-        let dataset2 = RefDataset {
-            label: "test_genome".into(),
-            fasta: Some("https://example.com/new.fasta".into()),
-            ..Default::default()
-        };
-
-        project = project.register(dataset1).unwrap();
-        project = project.register(dataset2).unwrap();
-
-        assert_eq!(project.datasets().len(), 1);
-        assert_eq!(
-            project.datasets()[0].fasta,
-            Some("https://example.com/new.fasta".into())
-        );
-    }
-
-    #[test]
-    fn test_remove_dataset() {
-        let mut project = Project::new(None, None, false);
-        let dataset1 = RefDataset {
-            label: "genome1".into(),
-            fasta: Some("https://example.com/1.fasta".into()),
-            ..Default::default()
-        };
-        let dataset2 = RefDataset {
-            label: "genome2".into(),
-            fasta: Some("https://example.com/2.fasta".into()),
-            ..Default::default()
-        };
-
-        project = project.register(dataset1).unwrap();
-        project = project.register(dataset2).unwrap();
-        project = project.remove("genome1").unwrap();
-
-        assert_eq!(project.datasets().len(), 1);
-        assert_eq!(project.datasets()[0].label, "genome2");
-    }
-
-    #[test]
-    fn test_remove_final_dataset_error() {
-        let mut project = Project::new(None, None, false);
-        let dataset = RefDataset {
-            label: "test_genome".into(),
-            fasta: Some("https://example.com/genome.fasta".into()),
-            ..Default::default()
-        };
-
-        project = project.register(dataset).unwrap();
-        let result = project.remove("test_genome");
-
-        assert!(matches!(result, Err(EntryError::FinalEntry(_))));
-    }
-
-    #[test]
-    fn test_remove_nonexistent_dataset_error() {
-        let mut project = Project::new(None, None, false);
-        let dataset = RefDataset {
-            label: "test_genome".into(),
-            fasta: Some("https://example.com/genome.fasta".into()),
-            ..Default::default()
-        };
-
-        project = project.register(dataset).unwrap();
-        let result = project.remove("nonexistent");
-
-        assert!(matches!(result, Err(EntryError::LabelNotFound(_))));
     }
 
     #[test]
@@ -1426,25 +1568,6 @@ mod tests {
         assert_eq!(options.title, Some("Test Registry".to_string()));
         assert_eq!(options.description, Some("Test Description".to_string()));
         assert!(!options.global);
-    }
-
-    #[tokio::test]
-    async fn test_download_dataset() {
-        let temp_dir = tempdir().unwrap();
-        let mut project = Project::new(None, None, false);
-        let dataset = RefDataset {
-            label: "test".into(),
-            fasta: Some("https://example.com/nonexistent.fasta".into()),
-            ..Default::default()
-        };
-
-        project = project.register(dataset).unwrap();
-        let result = project
-            .download_dataset(Some("test"), temp_dir.path().to_path_buf())
-            .await;
-
-        // Should fail since URL doesn't exist
-        assert!(result.is_err());
     }
 
     #[test]

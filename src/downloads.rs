@@ -13,6 +13,8 @@ use tokio::{
 };
 use url::Url;
 
+use crate::validate::UnvalidatedFile;
+
 /// A helper function for downloading files with retry attempts built in.
 ///
 /// This module provides resilient file downloading capabilities with automatic retries,
@@ -48,12 +50,13 @@ use url::Url;
 /// - HTTP status code handling
 /// - Error recovery and retry logic
 pub async fn request_dataset(
-    url: &str,
+    file_to_request: UnvalidatedFile,
     client: Client,
     target_dir: &Path,
     mp: Arc<MultiProgress>,
-) -> Result<()> {
+) -> Result<UnvalidatedFile> {
     // Make sure the url is valid with lychee
+    let url = file_to_request.url();
     let valid_url = check_url(url).await?;
 
     // If it is, log out that it's valid
@@ -78,7 +81,7 @@ pub async fn request_dataset(
     let filename = uri_to_filename(&valid_url)?;
 
     // if the response was successful, stream the file's bytes into the output file name
-    if response.status().is_success() {
+    let downloaded_file = if response.status().is_success() {
         let file_path = target_dir.join(filename);
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent).await?;
@@ -95,7 +98,7 @@ pub async fn request_dataset(
         );
         pb.set_message(format!("Writing data into {filename}..."));
 
-        let mut file = File::create(file_path).await?;
+        let mut file = File::create(&file_path).await?;
         let mut stream = response.bytes_stream();
 
         while let Some(chunk_result) = stream.next().await {
@@ -111,8 +114,16 @@ pub async fn request_dataset(
             }
         }
         pb.set_message(format!("Writing data into {filename}...Done!"));
+
+        // pass on the file path if all is well
+        file_path
     } else if response.status().as_u16() == 404 {
         warn!("File not found: {}", url);
+        return Err(eyre!(
+            "Failed to download {}: HTTP {}",
+            filename,
+            response.status()
+        ));
     } else {
         error!(
             "Failed to download {}: HTTP {}",
@@ -124,9 +135,36 @@ pub async fn request_dataset(
             filename,
             response.status()
         ));
-    }
+    };
 
-    Ok(())
+    let downloaded = match file_to_request {
+        UnvalidatedFile::Fasta { uri, .. } => UnvalidatedFile::Fasta {
+            uri,
+            local_path: downloaded_file,
+        },
+        UnvalidatedFile::Genbank { uri, .. } => UnvalidatedFile::Genbank {
+            uri,
+            local_path: downloaded_file,
+        },
+        UnvalidatedFile::Gfa { uri, .. } => UnvalidatedFile::Gfa {
+            uri,
+            local_path: downloaded_file,
+        },
+        UnvalidatedFile::Gff { uri, .. } => UnvalidatedFile::Gff {
+            uri,
+            local_path: downloaded_file,
+        },
+        UnvalidatedFile::Gtf { uri, .. } => UnvalidatedFile::Gtf {
+            uri,
+            local_path: downloaded_file,
+        },
+        UnvalidatedFile::Bed { uri, .. } => UnvalidatedFile::Bed {
+            uri,
+            local_path: downloaded_file,
+        },
+    };
+
+    Ok(downloaded)
 }
 
 async fn download_with_retries(client: &Client, url: &str) -> Result<reqwest::Response> {

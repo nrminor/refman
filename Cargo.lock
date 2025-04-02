@@ -3585,6 +3585,7 @@ dependencies = [
  "jiff",
  "log",
  "lychee-lib",
+ "md5",
  "noodles",
  "pretty_assertions",
  "prettytable",
