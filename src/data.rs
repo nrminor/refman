@@ -1,4 +1,7 @@
-use std::{fmt::Display, path::PathBuf};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -253,7 +256,7 @@ impl RefDataset {
         }
     }
 
-    pub(crate) fn get_fasta_download(&self) -> Option<UnvalidatedFile> {
+    pub(crate) fn get_fasta_download(&self, target_dir: &Path) -> Option<UnvalidatedFile> {
         // resolve state for each of the files
         match &self.fasta {
             Some(file) => match file {
@@ -273,8 +276,9 @@ impl RefDataset {
                     // pull in the previously downloaded file path
                     let old_path = &validated_file.local_path;
 
-                    // make sure the old file still exists. If not, it should be downloaded.
-                    if !old_path.exists() {
+                    // make sure the old file still exists or is in the requested destination. If not, it should
+                    // be downloaded.
+                    if !old_path.exists() || !old_path.starts_with(target_dir) {
                         return Some(UnvalidatedFile::Fasta {
                             uri: validated_file.uri.clone(),
                             local_path: PathBuf::new(),
@@ -315,7 +319,7 @@ impl RefDataset {
         }
     }
 
-    pub(crate) fn get_genbank_download(&self) -> Option<UnvalidatedFile> {
+    pub(crate) fn get_genbank_download(&self, target_dir: &Path) -> Option<UnvalidatedFile> {
         match &self.genbank {
             Some(file) => match file {
                 DownloadStatus::NotYetDownloaded(uri) => {
@@ -335,8 +339,8 @@ impl RefDataset {
                     let old_path = &validated_file.local_path;
 
                     // make sure the old file still exists. If not, it should be downloaded.
-                    if !old_path.exists() {
-                        return Some(UnvalidatedFile::Fasta {
+                    if !old_path.exists() || !old_path.starts_with(target_dir) {
+                        return Some(UnvalidatedFile::Genbank {
                             uri: validated_file.uri.clone(),
                             local_path: PathBuf::new(),
                         });
@@ -376,7 +380,7 @@ impl RefDataset {
         }
     }
 
-    pub(crate) fn get_gfa_download(&self) -> Option<UnvalidatedFile> {
+    pub(crate) fn get_gfa_download(&self, target_dir: &Path) -> Option<UnvalidatedFile> {
         match &self.gfa {
             Some(file) => match file {
                 DownloadStatus::NotYetDownloaded(uri) => {
@@ -396,8 +400,8 @@ impl RefDataset {
                     let old_path = &validated_file.local_path;
 
                     // make sure the old file still exists. If not, it should be downloaded.
-                    if !old_path.exists() {
-                        return Some(UnvalidatedFile::Fasta {
+                    if !old_path.exists() || !old_path.starts_with(target_dir) {
+                        return Some(UnvalidatedFile::Gfa {
                             uri: validated_file.uri.clone(),
                             local_path: PathBuf::new(),
                         });
@@ -437,7 +441,7 @@ impl RefDataset {
         }
     }
 
-    pub(crate) fn get_gff_download(&self) -> Option<UnvalidatedFile> {
+    pub(crate) fn get_gff_download(&self, target_dir: &Path) -> Option<UnvalidatedFile> {
         match &self.gff {
             Some(file) => match file {
                 DownloadStatus::NotYetDownloaded(uri) => {
@@ -457,8 +461,8 @@ impl RefDataset {
                     let old_path = &validated_file.local_path;
 
                     // make sure the old file still exists. If not, it should be downloaded.
-                    if !old_path.exists() {
-                        return Some(UnvalidatedFile::Fasta {
+                    if !old_path.exists() || !old_path.starts_with(target_dir) {
+                        return Some(UnvalidatedFile::Gff {
                             uri: validated_file.uri.clone(),
                             local_path: PathBuf::new(),
                         });
@@ -498,7 +502,7 @@ impl RefDataset {
         }
     }
 
-    pub(crate) fn get_gtf_download(&self) -> Option<UnvalidatedFile> {
+    pub(crate) fn get_gtf_download(&self, target_dir: &Path) -> Option<UnvalidatedFile> {
         match &self.gtf {
             Some(file) => match file {
                 DownloadStatus::NotYetDownloaded(uri) => {
@@ -518,8 +522,8 @@ impl RefDataset {
                     let old_path = &validated_file.local_path;
 
                     // make sure the old file still exists. If not, it should be downloaded.
-                    if !old_path.exists() {
-                        return Some(UnvalidatedFile::Fasta {
+                    if !old_path.exists() || !old_path.starts_with(target_dir) {
+                        return Some(UnvalidatedFile::Gtf {
                             uri: validated_file.uri.clone(),
                             local_path: PathBuf::new(),
                         });
@@ -559,7 +563,7 @@ impl RefDataset {
         }
     }
 
-    pub(crate) fn get_bed_download(&self) -> Option<UnvalidatedFile> {
+    pub(crate) fn get_bed_download(&self, target_dir: &Path) -> Option<UnvalidatedFile> {
         match &self.bed {
             Some(file) => match file {
                 DownloadStatus::NotYetDownloaded(uri) => {
@@ -579,8 +583,8 @@ impl RefDataset {
                     let old_path = &validated_file.local_path;
 
                     // make sure the old file still exists. If not, it should be downloaded.
-                    if !old_path.exists() {
-                        return Some(UnvalidatedFile::Fasta {
+                    if !old_path.exists() || !old_path.starts_with(target_dir) {
+                        return Some(UnvalidatedFile::Bed {
                             uri: validated_file.uri.clone(),
                             local_path: PathBuf::new(),
                         });

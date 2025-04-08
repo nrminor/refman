@@ -549,9 +549,10 @@ impl Project {
     }
 
     #[allow(clippy::similar_names)]
-    pub(crate) fn get_downloads_per_dataset(
+    pub(crate) fn collect_downloads(
         &self,
         label: Option<&str>,
+        target_dir: &Path,
     ) -> Vec<(RefDataset, Vec<UnvalidatedFile>)> {
         let datasets = if let Some(label) = label {
             self.clone()
@@ -569,12 +570,12 @@ impl Project {
         datasets
             .into_iter()
             .map(|dataset| {
-                let fasta = dataset.get_fasta_download();
-                let genbank = dataset.get_genbank_download();
-                let gfa = dataset.get_gfa_download();
-                let gtf = dataset.get_gtf_download();
-                let gff = dataset.get_gff_download();
-                let bed = dataset.get_bed_download();
+                let fasta = dataset.get_fasta_download(target_dir);
+                let genbank = dataset.get_genbank_download(target_dir);
+                let gfa = dataset.get_gfa_download(target_dir);
+                let gtf = dataset.get_gtf_download(target_dir);
+                let gff = dataset.get_gff_download(target_dir);
+                let bed = dataset.get_bed_download(target_dir);
                 let files = [fasta, genbank, gfa, gff, gtf, bed]
                     .into_iter()
                     .flatten()
@@ -642,7 +643,7 @@ impl Project {
 
         // pull in the sets of files to be downloaded
         let dataset_files: Vec<(RefDataset, Vec<UnvalidatedFile>)> =
-            self.get_downloads_per_dataset(label);
+            self.collect_downloads(label, &target_dir);
 
         // count the downloads
         let num_to_download = count_downloads(&dataset_files);

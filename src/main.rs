@@ -1,6 +1,6 @@
 #![warn(clippy::pedantic, clippy::perf)]
 
-use std::env;
+use std::path::PathBuf;
 
 use clap::Parser;
 use clap_verbosity_flag::Verbosity;
@@ -97,10 +97,7 @@ async fn main() -> Result<()> {
             let options = RegistryOptions::try_new(None, None, &registry, global)?;
 
             // set up the destination path
-            let destination = match dest {
-                Some(dest) => dest,
-                None => env::current_dir()?,
-            };
+            let destination = dest.unwrap_or_else(|| PathBuf::from("."));
 
             // read in the project data
             let project = options.read_registry()?;
