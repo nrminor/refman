@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     EntryError, ValidationError,
     downloads::check_url,
-    validate::{UnvalidatedFile, ValidatedFile},
+    validate::{UnvalidatedFile, ValidatedFile, hash_valid_download},
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -264,16 +264,29 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
-                    let old_hash = &validated_file.hash;
-                    if old_hash.is_some() {
-                        None
-                    } else {
-                        let unvalidated = UnvalidatedFile::Fasta {
-                            uri: validated_file.uri.clone(),
-                            local_path: PathBuf::new(),
-                        };
-                        Some(unvalidated)
+                    // pull in the previously downloaded file path
+                    let old_path = &validated_file.local_path;
+
+                    // make sure there's a hash we can use to checksum
+                    let Some(old_hash) = &validated_file.hash else {
+                        return None;
+                    };
+
+                    // make sure the file exists and still matches the hash. Otherwise, re-download.
+                    let Ok(new_hash) = hash_valid_download(old_path) else {
+                        return None;
+                    };
+                    if old_path.exists() && old_hash.eq(&new_hash) {
+                        return None;
                     }
+
+                    // if we've made it this far, the file should be redownloaded. Clear the
+                    // local path and fill the URI into an UnvalidatedFile variant
+                    let unvalidated = UnvalidatedFile::Fasta {
+                        uri: validated_file.uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
                 }
             },
             None => None,
@@ -291,16 +304,29 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
-                    let old_hash = &validated_file.hash;
-                    if old_hash.is_some() {
-                        None
-                    } else {
-                        let unvalidated = UnvalidatedFile::Genbank {
-                            uri: validated_file.uri.clone(),
-                            local_path: PathBuf::new(),
-                        };
-                        Some(unvalidated)
+                    // pull in the previously downloaded file path
+                    let old_path = &validated_file.local_path;
+
+                    // make sure there's a hash we can use to checksum
+                    let Some(old_hash) = &validated_file.hash else {
+                        return None;
+                    };
+
+                    // make sure the file exists and still matches the hash. Otherwise, re-download.
+                    let Ok(new_hash) = hash_valid_download(old_path) else {
+                        return None;
+                    };
+                    if old_path.exists() && old_hash.eq(&new_hash) {
+                        return None;
                     }
+
+                    // if we've made it this far, the file should be redownloaded. Clear the
+                    // local path and fill the URI into an UnvalidatedFile variant
+                    let unvalidated = UnvalidatedFile::Genbank {
+                        uri: validated_file.uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
                 }
             },
             None => None,
@@ -318,16 +344,29 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
-                    let old_hash = &validated_file.hash;
-                    if old_hash.is_some() {
-                        None
-                    } else {
-                        let unvalidated = UnvalidatedFile::Gfa {
-                            uri: validated_file.uri.clone(),
-                            local_path: PathBuf::new(),
-                        };
-                        Some(unvalidated)
+                    // pull in the previously downloaded file path
+                    let old_path = &validated_file.local_path;
+
+                    // make sure there's a hash we can use to checksum
+                    let Some(old_hash) = &validated_file.hash else {
+                        return None;
+                    };
+
+                    // make sure the file exists and still matches the hash. Otherwise, re-download.
+                    let Ok(new_hash) = hash_valid_download(old_path) else {
+                        return None;
+                    };
+                    if old_path.exists() && old_hash.eq(&new_hash) {
+                        return None;
                     }
+
+                    // if we've made it this far, the file should be redownloaded. Clear the
+                    // local path and fill the URI into an UnvalidatedFile variant
+                    let unvalidated = UnvalidatedFile::Gfa {
+                        uri: validated_file.uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
                 }
             },
             None => None,
@@ -345,16 +384,29 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
-                    let old_hash = &validated_file.hash;
-                    if old_hash.is_some() {
-                        None
-                    } else {
-                        let unvalidated = UnvalidatedFile::Gff {
-                            uri: validated_file.uri.clone(),
-                            local_path: PathBuf::new(),
-                        };
-                        Some(unvalidated)
+                    // pull in the previously downloaded file path
+                    let old_path = &validated_file.local_path;
+
+                    // make sure there's a hash we can use to checksum
+                    let Some(old_hash) = &validated_file.hash else {
+                        return None;
+                    };
+
+                    // make sure the file exists and still matches the hash. Otherwise, re-download.
+                    let Ok(new_hash) = hash_valid_download(old_path) else {
+                        return None;
+                    };
+                    if old_path.exists() && old_hash.eq(&new_hash) {
+                        return None;
                     }
+
+                    // if we've made it this far, the file should be redownloaded. Clear the
+                    // local path and fill the URI into an UnvalidatedFile variant
+                    let unvalidated = UnvalidatedFile::Gff {
+                        uri: validated_file.uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
                 }
             },
             None => None,
@@ -372,16 +424,29 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
-                    let old_hash = &validated_file.hash;
-                    if old_hash.is_some() {
-                        None
-                    } else {
-                        let unvalidated = UnvalidatedFile::Gtf {
-                            uri: validated_file.uri.clone(),
-                            local_path: PathBuf::new(),
-                        };
-                        Some(unvalidated)
+                    // pull in the previously downloaded file path
+                    let old_path = &validated_file.local_path;
+
+                    // make sure there's a hash we can use to checksum
+                    let Some(old_hash) = &validated_file.hash else {
+                        return None;
+                    };
+
+                    // make sure the file exists and still matches the hash. Otherwise, re-download.
+                    let Ok(new_hash) = hash_valid_download(old_path) else {
+                        return None;
+                    };
+                    if old_path.exists() && old_hash.eq(&new_hash) {
+                        return None;
                     }
+
+                    // if we've made it this far, the file should be redownloaded. Clear the
+                    // local path and fill the URI into an UnvalidatedFile variant
+                    let unvalidated = UnvalidatedFile::Gtf {
+                        uri: validated_file.uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
                 }
             },
             None => None,
@@ -399,16 +464,29 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
-                    let old_hash = &validated_file.hash;
-                    if old_hash.is_some() {
-                        None
-                    } else {
-                        let unvalidated = UnvalidatedFile::Bed {
-                            uri: validated_file.uri.clone(),
-                            local_path: PathBuf::new(),
-                        };
-                        Some(unvalidated)
+                    // pull in the previously downloaded file path
+                    let old_path = &validated_file.local_path;
+
+                    // make sure there's a hash we can use to checksum
+                    let Some(old_hash) = &validated_file.hash else {
+                        return None;
+                    };
+
+                    // make sure the file exists and still matches the hash. Otherwise, re-download.
+                    let Ok(new_hash) = hash_valid_download(old_path) else {
+                        return None;
+                    };
+                    if old_path.exists() && old_hash.eq(&new_hash) {
+                        return None;
                     }
+
+                    // if we've made it this far, the file should be redownloaded. Clear the
+                    // local path and fill the URI into an UnvalidatedFile variant
+                    let unvalidated = UnvalidatedFile::Bed {
+                        uri: validated_file.uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
                 }
             },
             None => None,

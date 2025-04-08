@@ -92,7 +92,7 @@ impl UnvalidatedFile {
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq, Clone)]
 pub struct ValidatedFile {
     pub uri: String,
-    // pub local_path: PathBuf,
+    pub local_path: PathBuf,
     pub validated: bool,
     pub hash: Option<String>,
     pub last_validated: Option<Timestamp>,
@@ -185,11 +185,11 @@ impl UnvalidatedFile {
                 (uri, local_path)
             }
         };
-        let hash = hash_valid_download(local_path).expect("");
+        let hash = hash_valid_download(local_path)?;
         let timestamp = Timestamp::now();
         let validated = ValidatedFile {
             uri: uri.clone(),
-            // local_path: local_path.clone(),
+            local_path: local_path.clone(),
             validated: true,
             hash: Some(hash),
             last_validated: Some(timestamp),

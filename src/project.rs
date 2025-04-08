@@ -565,6 +565,7 @@ impl Project {
                 .into_iter()
                 .collect::<Vec<_>>()
         };
+        assert_ne!(0, datasets.len());
         datasets
             .into_iter()
             .map(|dataset| {
@@ -574,7 +575,7 @@ impl Project {
                 let gtf = dataset.get_gtf_download();
                 let gff = dataset.get_gff_download();
                 let bed = dataset.get_bed_download();
-                let files = vec![fasta, genbank, gfa, gff, gtf, bed]
+                let files = [fasta, genbank, gfa, gff, gtf, bed]
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
@@ -643,9 +644,19 @@ impl Project {
         let dataset_files: Vec<(RefDataset, Vec<UnvalidatedFile>)> =
             self.get_downloads_per_dataset(label);
 
+        // count the downloads
+        let num_to_download = count_downloads(&dataset_files);
+
+        // early return if there's nothing to download
+        if num_to_download == 0 {
+            info!(
+                "All requested files were previously downloaded and still passed checksums, so no downloads will be performed."
+            );
+            return Ok(self);
+        }
+
         // set up a progress bar based on the number
-        let (num_to_download, mut toplevel_pb, multiprog) =
-            setup_progress_tracking(&dataset_files, label);
+        let (mut toplevel_pb, multiprog) = setup_progress_tracking(label, num_to_download);
 
         // put each download into its own tokio thread, and collect its handle into a vector
         // that can be polled downstream
@@ -1414,20 +1425,20 @@ fn set_refman_home(desired_dir: &str) {
     }
 }
 
+fn count_downloads(dataset_files: &[(RefDataset, Vec<UnvalidatedFile>)]) -> usize {
+    // count the files to generate a message to inform the user of what will be downloaded
+    let mut num_to_download = 0;
+    for (_, files) in dataset_files {
+        num_to_download += files.len();
+    }
+    num_to_download
+}
+
 #[allow(clippy::expect_used)]
 fn setup_progress_tracking(
-    dataset_files: &[(RefDataset, Vec<UnvalidatedFile>)],
     label: Option<&str>,
-) -> (usize, ProgressBar, Arc<MultiProgress>) {
-    // count the files to generate a message to inform the user of what will be downloaded
-    let num_to_download = {
-        let mut num_to_download = 0;
-        for (_, files) in dataset_files {
-            num_to_download += files.len();
-        }
-        num_to_download
-    };
-
+    num_to_download: usize,
+) -> (ProgressBar, Arc<MultiProgress>) {
     // generate a message based on whether a particular dataset was requested as well as on the number
     // of files to be downloaded.
     let message = match label {
@@ -1452,7 +1463,7 @@ fn setup_progress_tracking(
 
     // return a raw tuple containing the number to download, the top-level progress bar, and the per-file
     // progress bar
-    (num_to_download, toplevel_pb, multi_pb)
+    (toplevel_pb, multi_pb)
 }
 
 fn submit_download_requests(
