@@ -1,5 +1,6 @@
 use std::{fmt::Display, path::PathBuf};
 
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -264,19 +265,40 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
+                    debug!(
+                        "Deciding whether to re-download the previously downloaded file at {:?}...",
+                        validated_file
+                    );
+
                     // pull in the previously downloaded file path
                     let old_path = &validated_file.local_path;
 
+                    // make sure the old file still exists. If not, it should be downloaded.
+                    if !old_path.exists() {
+                        return Some(UnvalidatedFile::Fasta {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        });
+                    }
+
                     // make sure there's a hash we can use to checksum
                     let Some(old_hash) = &validated_file.hash else {
+                        debug!("The file was never hashed, so it will be re-downloaded");
                         return None;
                     };
 
                     // make sure the file exists and still matches the hash. Otherwise, re-download.
                     let Ok(new_hash) = hash_valid_download(old_path) else {
+                        debug!(
+                            "The checksum failed because the file could not be accessed, so it will be redownloaded"
+                        );
                         return None;
                     };
                     if old_path.exists() && old_hash.eq(&new_hash) {
+                        debug!(
+                            "The path previously recorded for the download, {:?}, existed and it passed the checksum, so it will not be re-downloaded",
+                            old_path,
+                        );
                         return None;
                     }
 
@@ -304,19 +326,40 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
+                    debug!(
+                        "Deciding whether to re-download the previously downloaded file at {:?}...",
+                        validated_file
+                    );
+
                     // pull in the previously downloaded file path
                     let old_path = &validated_file.local_path;
 
+                    // make sure the old file still exists. If not, it should be downloaded.
+                    if !old_path.exists() {
+                        return Some(UnvalidatedFile::Fasta {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        });
+                    }
+
                     // make sure there's a hash we can use to checksum
                     let Some(old_hash) = &validated_file.hash else {
+                        debug!("The file was never hashed, so it will be re-downloaded");
                         return None;
                     };
 
                     // make sure the file exists and still matches the hash. Otherwise, re-download.
                     let Ok(new_hash) = hash_valid_download(old_path) else {
+                        debug!(
+                            "The checksum failed because the file could not be accessed, so it will be redownloaded"
+                        );
                         return None;
                     };
                     if old_path.exists() && old_hash.eq(&new_hash) {
+                        debug!(
+                            "The path previously recorded for the download, {:?}, existed and it passed the checksum, so it will not be re-downloaded",
+                            old_path,
+                        );
                         return None;
                     }
 
@@ -344,19 +387,40 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
+                    debug!(
+                        "Deciding whether to re-download the previously downloaded file at {:?}...",
+                        validated_file
+                    );
+
                     // pull in the previously downloaded file path
                     let old_path = &validated_file.local_path;
 
+                    // make sure the old file still exists. If not, it should be downloaded.
+                    if !old_path.exists() {
+                        return Some(UnvalidatedFile::Fasta {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        });
+                    }
+
                     // make sure there's a hash we can use to checksum
                     let Some(old_hash) = &validated_file.hash else {
+                        debug!("The file was never hashed, so it will be re-downloaded");
                         return None;
                     };
 
                     // make sure the file exists and still matches the hash. Otherwise, re-download.
                     let Ok(new_hash) = hash_valid_download(old_path) else {
+                        debug!(
+                            "The checksum failed because the file could not be accessed, so it will be redownloaded"
+                        );
                         return None;
                     };
                     if old_path.exists() && old_hash.eq(&new_hash) {
+                        debug!(
+                            "The path previously recorded for the download, {:?}, existed and it passed the checksum, so it will not be re-downloaded",
+                            old_path,
+                        );
                         return None;
                     }
 
@@ -384,19 +448,40 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
+                    debug!(
+                        "Deciding whether to re-download the previously downloaded file at {:?}...",
+                        validated_file
+                    );
+
                     // pull in the previously downloaded file path
                     let old_path = &validated_file.local_path;
 
+                    // make sure the old file still exists. If not, it should be downloaded.
+                    if !old_path.exists() {
+                        return Some(UnvalidatedFile::Fasta {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        });
+                    }
+
                     // make sure there's a hash we can use to checksum
                     let Some(old_hash) = &validated_file.hash else {
+                        debug!("The file was never hashed, so it will be re-downloaded");
                         return None;
                     };
 
                     // make sure the file exists and still matches the hash. Otherwise, re-download.
                     let Ok(new_hash) = hash_valid_download(old_path) else {
+                        debug!(
+                            "The checksum failed because the file could not be accessed, so it will be redownloaded"
+                        );
                         return None;
                     };
                     if old_path.exists() && old_hash.eq(&new_hash) {
+                        debug!(
+                            "The path previously recorded for the download, {:?}, existed and it passed the checksum, so it will not be re-downloaded",
+                            old_path,
+                        );
                         return None;
                     }
 
@@ -424,19 +509,40 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
+                    debug!(
+                        "Deciding whether to re-download the previously downloaded file at {:?}...",
+                        validated_file
+                    );
+
                     // pull in the previously downloaded file path
                     let old_path = &validated_file.local_path;
 
+                    // make sure the old file still exists. If not, it should be downloaded.
+                    if !old_path.exists() {
+                        return Some(UnvalidatedFile::Fasta {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        });
+                    }
+
                     // make sure there's a hash we can use to checksum
                     let Some(old_hash) = &validated_file.hash else {
+                        debug!("The file was never hashed, so it will be re-downloaded");
                         return None;
                     };
 
                     // make sure the file exists and still matches the hash. Otherwise, re-download.
                     let Ok(new_hash) = hash_valid_download(old_path) else {
+                        debug!(
+                            "The checksum failed because the file could not be accessed, so it will be redownloaded"
+                        );
                         return None;
                     };
                     if old_path.exists() && old_hash.eq(&new_hash) {
+                        debug!(
+                            "The path previously recorded for the download, {:?}, existed and it passed the checksum, so it will not be re-downloaded",
+                            old_path,
+                        );
                         return None;
                     }
 
@@ -464,19 +570,40 @@ impl RefDataset {
                     Some(unvalidated)
                 }
                 DownloadStatus::Downloaded(validated_file) => {
+                    debug!(
+                        "Deciding whether to re-download the previously downloaded file at {:?}...",
+                        validated_file
+                    );
+
                     // pull in the previously downloaded file path
                     let old_path = &validated_file.local_path;
 
+                    // make sure the old file still exists. If not, it should be downloaded.
+                    if !old_path.exists() {
+                        return Some(UnvalidatedFile::Fasta {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        });
+                    }
+
                     // make sure there's a hash we can use to checksum
                     let Some(old_hash) = &validated_file.hash else {
+                        debug!("The file was never hashed, so it will be re-downloaded");
                         return None;
                     };
 
                     // make sure the file exists and still matches the hash. Otherwise, re-download.
                     let Ok(new_hash) = hash_valid_download(old_path) else {
+                        debug!(
+                            "The checksum failed because the file could not be accessed, so it will be redownloaded"
+                        );
                         return None;
                     };
                     if old_path.exists() && old_hash.eq(&new_hash) {
+                        debug!(
+                            "The path previously recorded for the download, {:?}, existed and it passed the checksum, so it will not be re-downloaded",
+                            old_path,
+                        );
                         return None;
                     }
 
