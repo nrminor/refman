@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     env::{self, current_dir},
     fs::{self, File, read_to_string},
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
@@ -640,122 +640,20 @@ impl Project {
         let shared_client = Client::new();
 
         // pull in the sets of files to be downloaded
-        let dataset_files = self.get_downloads_per_dataset(label);
+        let dataset_files: Vec<(RefDataset, Vec<UnvalidatedFile>)> =
+            self.get_downloads_per_dataset(label);
 
-        // count the files to generate a message to inform the user of what will be downloaded
-        let mut num_to_download = 0;
-        for (_, files) in &dataset_files {
-            num_to_download += files.len();
-        }
-        let message = if let Some(label_str) = label {
-            format!("Downloading {num_to_download} files for project labeled '{label_str}'...")
-        } else {
-            format!("Downloading all {num_to_download} files listed in the refman registry...")
-        };
-
-        // Create a shared MultiProgress container.
-        let mp = Arc::new(MultiProgress::new());
-
-        // Create a top-level progress bar with total length equal to the number of files.
-        let toplevel_pb = mp.add(ProgressBar::new(num_to_download as u64));
-        toplevel_pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
-                .expect("Failed to set template"),
-        );
-        toplevel_pb.set_message(message);
+        // set up a progress bar based on the number
+        let (num_to_download, mut toplevel_pb, multiprog) =
+            setup_progress_tracking(&dataset_files, label);
 
         // put each download into its own tokio thread, and collect its handle into a vector
         // that can be polled downstream
-        let mut dataset_task_handles: Vec<
-            JoinHandle<Result<(RefDataset, MultiDownloadResults), ColorError>>,
-        > = Vec::with_capacity(num_to_download);
-        for (dataset, files) in dataset_files {
-            let shared_client = shared_client.clone();
-            let target_dir = target_dir.clone();
-            let mp = mp.clone();
+        let dataset_task_handles =
+            submit_download_requests(dataset_files, &shared_client, &target_dir, &multiprog);
 
-            // Spawn a task per dataset
-            let handle: JoinHandle<_> = tokio::spawn(async move {
-                // Inside this task: spawn parallel tasks for each file
-                let file_task_handles = files.into_iter().map(|file| {
-                    let client = shared_client.clone();
-                    let dir = target_dir.clone();
-                    let mp = mp.clone();
-
-                    tokio::spawn(async move { request_dataset(file, client, &dir, mp).await })
-                });
-
-                // Await all file downloads for this dataset
-                let file_results = try_join_all(file_task_handles).await?;
-
-                Ok((dataset, file_results))
-            });
-
-            dataset_task_handles.push(handle);
-        }
-
-        let updated_datasets: Vec<RefDataset> = try_join_all(dataset_task_handles)
-            .await?
-            .into_iter()
-            .filter_map(|dataset_result| {
-                toplevel_pb.inc(1);
-                match dataset_result {
-                    Ok((dataset, file_results)) => {
-                        match file_results.into_iter().collect::<Result<Vec<_>, _>>() {
-                            Ok(successful_files) => Some((dataset, successful_files)),
-                            Err(msg) => {
-                                warn!("Failed to download files because of this error: {}", msg);
-                                None
-                            }
-                        }
-                    }
-                    Err(msg) => {
-                        warn!("Failed to download files because of this error: {}", msg);
-                        None
-                    }
-                }
-            })
-            .flat_map(
-                |(mut dataset, files)| -> Result<RefDataset, ValidationError> {
-                    for file in files {
-                        match file {
-                            UnvalidatedFile::Fasta { .. } => {
-                                let validated = file.try_validate()?;
-                                let complete_download = DownloadStatus::new_downloaded(validated);
-                                dataset.fasta = Some(complete_download);
-                            }
-                            UnvalidatedFile::Genbank { .. } => {
-                                let validated = file.try_validate()?;
-                                let complete_download = DownloadStatus::new_downloaded(validated);
-                                dataset.genbank = Some(complete_download);
-                            }
-                            UnvalidatedFile::Gfa { .. } => {
-                                let validated = file.try_validate()?;
-                                let complete_download = DownloadStatus::new_downloaded(validated);
-                                dataset.gfa = Some(complete_download);
-                            }
-                            UnvalidatedFile::Gff { .. } => {
-                                let validated = file.try_validate()?;
-                                let complete_download = DownloadStatus::new_downloaded(validated);
-                                dataset.gff = Some(complete_download);
-                            }
-                            UnvalidatedFile::Gtf { .. } => {
-                                let validated = file.try_validate()?;
-                                let complete_download = DownloadStatus::new_downloaded(validated);
-                                dataset.gtf = Some(complete_download);
-                            }
-                            UnvalidatedFile::Bed { .. } => {
-                                let validated = file.try_validate()?;
-                                let complete_download = DownloadStatus::new_downloaded(validated);
-                                dataset.bed = Some(complete_download);
-                            }
-                        };
-                    }
-                    Ok(dataset)
-                },
-            )
-            .collect();
+        let updated_datasets =
+            update_project_datasets(dataset_task_handles, &mut toplevel_pb).await?;
 
         // Once all downloads finish, update and finish the overall progress bar.
         toplevel_pb.finish_with_message(format!(
@@ -764,6 +662,7 @@ impl Project {
 
         // Update the project and return it
         let updated_project = self.update_registry(&updated_datasets);
+
         Ok(updated_project)
     }
 
@@ -1513,6 +1412,139 @@ fn set_refman_home(desired_dir: &str) {
         );
         unsafe { env::set_var("REFMAN_HOME", desired_dir) }
     }
+}
+
+#[allow(clippy::expect_used)]
+fn setup_progress_tracking(
+    dataset_files: &[(RefDataset, Vec<UnvalidatedFile>)],
+    label: Option<&str>,
+) -> (usize, ProgressBar, Arc<MultiProgress>) {
+    // count the files to generate a message to inform the user of what will be downloaded
+    let num_to_download = {
+        let mut num_to_download = 0;
+        for (_, files) in dataset_files {
+            num_to_download += files.len();
+        }
+        num_to_download
+    };
+
+    // generate a message based on whether a particular dataset was requested as well as on the number
+    // of files to be downloaded.
+    let message = match label {
+        Some(label_str) => {
+            format!("Downloading {num_to_download} files for project labeled '{label_str}'...")
+        }
+        None => format!("Downloading all {num_to_download} files listed in the refman registry..."),
+    };
+
+    // Create a shared MultiProgress container.
+    let multi_pb = Arc::new(MultiProgress::new());
+
+    // Create a top-level progress bar with total length equal to the number of files, and set its starting message
+    // with the message computed above
+    let toplevel_pb = multi_pb.add(ProgressBar::new(num_to_download as u64));
+    toplevel_pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+            .expect("Failed to set template"),
+    );
+    toplevel_pb.set_message(message);
+
+    // return a raw tuple containing the number to download, the top-level progress bar, and the per-file
+    // progress bar
+    (num_to_download, toplevel_pb, multi_pb)
+}
+
+fn submit_download_requests(
+    dataset_files: Vec<(RefDataset, Vec<UnvalidatedFile>)>,
+    shared_client: &Client,
+    target_dir: &Path,
+    mp: &Arc<MultiProgress>,
+) -> Vec<JoinHandle<Result<(RefDataset, MultiDownloadResults), ColorError>>> {
+    // count the number of files to download
+    let num_to_download = dataset_files.len();
+
+    // use that count to initialize a vector of exactly the right length, each item of which will be a deeply
+    // nested result of vectors of results. This is because tasks will be spawned at two levels: one task per
+    // request `RefDataset`, and all the registered files per `RefDataset`.
+    let mut dataset_task_handles: Vec<
+        JoinHandle<Result<(RefDataset, MultiDownloadResults), ColorError>>,
+    > = Vec::with_capacity(num_to_download);
+
+    // Go through each dataset and its registered files and request them. This design can be thought of somewhat like
+    // actors, where each dataset task supervises each file download task
+    for (dataset, files) in dataset_files {
+        let shared_client = shared_client.clone();
+        let mp = mp.clone();
+        let target_dir = Arc::new(target_dir.to_path_buf());
+
+        // Spawn a task per dataset
+        let handle: JoinHandle<_> = tokio::spawn(async move {
+            // Inside this task: spawn parallel tasks for each file
+            let file_task_handles = files.into_iter().map(|file| {
+                let client = shared_client.clone();
+                let dir = target_dir.clone();
+                let mp = mp.clone();
+
+                tokio::spawn(async move { request_dataset(file, client, dir, mp).await })
+            });
+
+            // Await all file download tasks for this dataset
+            let file_results = try_join_all(file_task_handles).await?;
+
+            Ok((dataset, file_results))
+        });
+
+        // collect all the dataset "supervisor" tasks
+        dataset_task_handles.push(handle);
+    }
+
+    dataset_task_handles
+}
+
+async fn update_project_datasets(
+    dataset_task_handles: Vec<JoinHandle<Result<(RefDataset, MultiDownloadResults), ColorError>>>,
+    toplevel_pb: &mut ProgressBar,
+) -> color_eyre::Result<Vec<RefDataset>> {
+    // await all tasks in all threads, collecting them into a vec after the transformations below
+    let updated_datasets: Vec<RefDataset> = try_join_all(dataset_task_handles)
+        .await?
+        // no need to reference each item; consuming them is fine here
+        .into_iter()
+        // take each attempted download, and, if successful, increment the progress bar, and then keep the
+        // successful unvalidated downloads in a vector
+        .filter_map(|dataset_result| {
+            toplevel_pb.inc(1);
+            match dataset_result {
+                Ok((dataset, file_results)) => {
+                    match file_results.into_iter().collect::<Result<Vec<_>, _>>() {
+                        Ok(successful_files) => Some((dataset, successful_files)),
+                        Err(msg) => {
+                            warn!("Failed to download files because of this error: {}", msg);
+                            None
+                        }
+                    }
+                }
+                Err(msg) => {
+                    warn!("Failed to download files because of this error: {}", msg);
+                    None
+                }
+            }
+        })
+        // now use each successful download to update its associated dataset, returning an owned updated dataset or
+        // a validation error (the update performs validation under the hood)
+        .flat_map(
+            |(mut dataset, files)| -> Result<RefDataset, ValidationError> {
+                for file in files {
+                    dataset.update_with_download(&file)?;
+                }
+                Ok(dataset)
+            },
+        )
+        .collect();
+
+    // return the vector of updated `RefDataset` instances
+    Ok(updated_datasets)
 }
 
 #[cfg(test)]

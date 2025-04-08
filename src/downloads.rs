@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::{path::Path, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use color_eyre::{Result, eyre::eyre};
 use futures::StreamExt;
@@ -52,8 +51,8 @@ use crate::validate::UnvalidatedFile;
 pub async fn request_dataset(
     file_to_request: UnvalidatedFile,
     client: Client,
-    target_dir: &Path,
-    mp: Arc<MultiProgress>,
+    target_dir: Arc<PathBuf>,
+    multi_progbar: Arc<MultiProgress>,
 ) -> Result<UnvalidatedFile> {
     // Make sure the url is valid with lychee
     let url = file_to_request.url();
@@ -88,15 +87,15 @@ pub async fn request_dataset(
         }
 
         // Create and configure the progress bar.
-        let pb = mp.add(ProgressBar::new(total_size));
-        pb.set_style(
+        let prog_bar = multi_progbar.add(ProgressBar::new(total_size));
+        prog_bar.set_style(
             ProgressStyle::default_bar()
                 .template(
                     "{msg} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})",
                 )?
                 .progress_chars("##-"),
         );
-        pb.set_message(format!("Writing data into {filename}..."));
+        prog_bar.set_message(format!("Writing data into {filename}..."));
 
         let mut file = File::create(&file_path).await?;
         let mut stream = response.bytes_stream();
@@ -105,7 +104,7 @@ pub async fn request_dataset(
             match chunk_result {
                 Ok(chunk) => {
                     file.write_all(&chunk).await?;
-                    pb.inc(chunk.len() as u64);
+                    prog_bar.inc(chunk.len() as u64);
                 }
                 Err(e) => {
                     error!("Error while reading chunk from {}: {}", url, e);
@@ -113,7 +112,7 @@ pub async fn request_dataset(
                 }
             }
         }
-        pb.set_message(format!("Writing data into {filename}...Done!"));
+        prog_bar.set_message(format!("Writing data into {filename}...Done!"));
 
         // pass on the file path if all is well
         file_path
@@ -137,32 +136,7 @@ pub async fn request_dataset(
         ));
     };
 
-    let downloaded = match file_to_request {
-        UnvalidatedFile::Fasta { uri, .. } => UnvalidatedFile::Fasta {
-            uri,
-            local_path: downloaded_file,
-        },
-        UnvalidatedFile::Genbank { uri, .. } => UnvalidatedFile::Genbank {
-            uri,
-            local_path: downloaded_file,
-        },
-        UnvalidatedFile::Gfa { uri, .. } => UnvalidatedFile::Gfa {
-            uri,
-            local_path: downloaded_file,
-        },
-        UnvalidatedFile::Gff { uri, .. } => UnvalidatedFile::Gff {
-            uri,
-            local_path: downloaded_file,
-        },
-        UnvalidatedFile::Gtf { uri, .. } => UnvalidatedFile::Gtf {
-            uri,
-            local_path: downloaded_file,
-        },
-        UnvalidatedFile::Bed { uri, .. } => UnvalidatedFile::Bed {
-            uri,
-            local_path: downloaded_file,
-        },
-    };
+    let downloaded = file_to_request.set_path(downloaded_file);
 
     Ok(downloaded)
 }

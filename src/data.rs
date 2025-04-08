@@ -35,14 +35,17 @@ impl Display for DownloadStatus {
 }
 
 impl DownloadStatus {
+    #[must_use]
     pub fn new(file: String) -> Self {
         DownloadStatus::NotYetDownloaded(file)
     }
 
+    #[must_use]
     pub fn new_downloaded(file: ValidatedFile) -> Self {
         Self::Downloaded(file)
     }
 
+    #[must_use]
     pub fn url(&self) -> &str {
         match self {
             DownloadStatus::NotYetDownloaded(url) => url,
@@ -50,6 +53,7 @@ impl DownloadStatus {
         }
     }
 
+    #[must_use]
     pub fn url_owned(&self) -> String {
         match self {
             DownloadStatus::NotYetDownloaded(url) => url.to_owned(),
@@ -57,6 +61,7 @@ impl DownloadStatus {
         }
     }
 
+    #[must_use]
     pub fn is_downloaded(&self) -> bool {
         match self {
             DownloadStatus::NotYetDownloaded(_) => false,
@@ -64,6 +69,7 @@ impl DownloadStatus {
         }
     }
 
+    #[must_use]
     pub fn is_validated(&self) -> bool {
         match self {
             DownloadStatus::NotYetDownloaded(_) => false,
@@ -409,7 +415,47 @@ impl RefDataset {
         }
     }
 
-    pub fn validate_download(
+    /// Updates the state of the dataset with newly downloaded and validated file's information.
+    ///
+    /// This method takes an `UnvalidatedFile` that has been downloaded and validates it,
+    /// updating the corresponding field in the dataset with the new download status. This
+    /// is a key part of the refman register-download-validate workflow, transitioning files
+    /// from the `NotYetDownloaded` to `Downloaded` state.
+    ///
+    /// The method handles all supported file types (FASTA, Genbank, GFA, GFF, GTF, BED)
+    /// and updates the respective field in the dataset with validated file information,
+    /// including hash values and local paths.
+    ///
+    /// # Arguments
+    ///
+    /// * `downloaded_file` - An `UnvalidatedFile` containing the downloaded file's information,
+    ///    including its URI and local path
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if validation and update succeeds, otherwise returns a `ValidationError`
+    ///
+    /// # Errors
+    ///
+    /// Returns a `ValidationError` if:
+    /// - The file fails validation checks
+    /// - The file hash cannot be computed
+    /// - The file type is invalid or corrupted
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use your_crate::{RefDataset, UnvalidatedFile};
+    /// use std::path::PathBuf;
+    ///
+    /// let mut dataset = RefDataset::default();
+    /// let downloaded = UnvalidatedFile::Fasta {
+    ///     uri: "https://example.com/file.fa".to_string(),
+    ///     local_path: PathBuf::from("/tmp/file.fa"),
+    /// };
+    /// dataset.update_with_download(&downloaded).unwrap();
+    /// ```
+    pub fn update_with_download(
         &mut self,
         downloaded_file: &UnvalidatedFile,
     ) -> Result<(), ValidationError> {
