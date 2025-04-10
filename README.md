@@ -31,7 +31,7 @@ cargo install --path="."
 
 ### Use it through Python
 
-`refman` also has a Python API that can soon be installed with `pip install py-refman`. See [the `py-refman` Github repository](https://github.com/nrminor/py-refman) for more information about its usage.
+`refman` also has a Python API that ~~can be installed~~ will soon be installable with `pip install py-refman`. See [the `py-refman` Github repository](https://github.com/nrminor/py-refman) for more information about its usage.
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ cargo install --path="."
 █  ███  ███  ████████  ████████  █  █  ██        ██  ██    █
 █  ████  ██        ██  ████████  ████  ██  ████  ██  ███   █
 
-refman (v1.0.0)
+refman (v1.3.0)
 ------------------------------------------------------------
 `refman` is a simple command-line tool for managing biological reference datasets often
 used in bioinformatics. These datasets may include raw sequence files, files encoding
@@ -144,12 +144,12 @@ Keep in mind that if you're coming to a new project with datasets managed with `
 - [ ] more black-box-, white-box-, and especially doc-tests
 - [x] link-checking with [lychee_lib](https://docs.rs/lychee-lib/latest/lychee_lib/)
 - [x] download progress bars
-- [ ] a GitHub workflow for generating releases so that static binaries are available
+- [x] a GitHub workflow for generating releases so that static binaries are available
 - [x] publication on [crates.io](https://crates.io/)
 - [ ] the ability to symlink locations in the local filesystem as opposed to only pulling from the internet
 - [ ] expanded metadata fields or file formats, e.g., VCFs
 - [ ] validation that an entry in a given file format is actually that format
-- [ ] file checksums
+- [x] file checksums
 - [ ] tasks/rules that tell `refman` to do some operation on a file once it's downloaded, potentially in an embedded scripting language like [Lua](https://www.lua.org/)
 - [ ] stable config file format
 - [ ] a global dotfile format with higher precedence than the tool's current defaults
