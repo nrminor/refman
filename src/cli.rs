@@ -10,7 +10,7 @@ pub const INFO: &str = r"
 █  ███  ███  ████████  ████████  █  █  ██        ██  ██    █
 █  ████  ██        ██  ████████  ████  ██  ████  ██  ███   █
 
-refman (v1.2.0)
+refman (v1.3.0)
 ------------------------------------------------------------
 `refman` is a simple command-line tool for managing biological reference datasets often
 used in bioinformatics. These datasets may include raw sequence files, files encoding
@@ -23,7 +23,7 @@ between users to aid scientific reproducibility.
 #[derive(Parser)]
 #[clap(name = "refman")]
 #[clap(about = INFO)]
-#[clap(version = "v1.2.0")]
+#[clap(version = "v1.3.0")]
 pub struct Cli {
     #[command(flatten)]
     pub verbose: clap_verbosity_flag::Verbosity,
@@ -52,7 +52,7 @@ pub struct Cli {
 pub enum Commands {
     #[clap(
         about = "Initialize a registry for the current project without registering any datasets.",
-        visible_aliases = &["i", "new"],
+        visible_aliases = &["i", "new", "n"],
     )]
     Init {
         /// Optional project title
@@ -117,7 +117,7 @@ pub enum Commands {
 
     #[clap(
         about = "Remove the files associated with a given dataset label",
-        visible_aliases = &["rm"],
+        visible_aliases = &["rm", "del", "delete"],
     )]
     Remove {
         /// Shorthand label for a dataset to register with refman. Once registered, this shorthand can be used
@@ -136,7 +136,7 @@ pub enum Commands {
 
     #[clap(
         about = "List all previously registered reference datasets",
-        visible_aliases = &["l"],
+        visible_aliases = &["l", "datasets"],
     )]
     List {
         /// Label string for a registered dataset
@@ -154,7 +154,7 @@ pub enum Commands {
 
     #[clap(
         about = "Download one or many reference datasets registered in the refman registry.",
-        visible_aliases = &["d", "dl", "down", "get", "fetch"]
+        visible_aliases = &["d", "dl", "down", "get", "g", "f", "fetch", "pull", "p"]
     )]
     Download {
         /// Label string for a registered dataset
