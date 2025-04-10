@@ -20,7 +20,7 @@
 !/examples
 
 !/.github
-!/.github/worklows
-!/.github/worklows/*.yml
-!/.github/worklows/*.yaml
+!/.github/workflows
+!/.github/workflows/*.yml
+!/.github/workflows/*.yaml
 
