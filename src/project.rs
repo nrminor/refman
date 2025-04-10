@@ -1360,7 +1360,7 @@ fn resolve_registry_path(
                 if let Some(current_dir_string) = current_dir.to_str() {
                     debug!("Setting the refman home to '{current_dir_string}'");
                     set_refman_home(current_dir_string);
-                };
+                }
 
                 return Ok(current_dir.join("refman.toml"));
             }
@@ -1397,7 +1397,7 @@ fn resolve_registry_path(
                 if let Some(current_dir_string) = current_dir.to_str() {
                     debug!("setting the refman home to '{current_dir_string}'");
                     set_refman_home(current_dir_string);
-                };
+                }
                 let resolved_home = current_dir.join(".refman");
                 debug!("setting the refman home to '{:?}'", resolved_home);
                 resolved_home

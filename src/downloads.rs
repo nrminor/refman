@@ -255,7 +255,7 @@ pub async fn check_url(url: &str) -> Result<Url> {
                     "The request for the provided URI, '{url}', timed out with the status code {}.",
                     code.as_str()
                 ));
-            };
+            }
             Err(eyre!(
                 "The request for the provided URI, '{url}', timed out without a status code."
             ))

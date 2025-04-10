@@ -638,7 +638,7 @@ impl RefDataset {
     /// # Arguments
     ///
     /// * `downloaded_file` - An `UnvalidatedFile` containing the downloaded file's information,
-    ///    including its URI and local path
+    ///   including its URI and local path
     ///
     /// # Returns
     ///

@@ -266,7 +266,7 @@ impl UnvalidatedFile {
                 let complete_download = DownloadStatus::new_downloaded(validated);
                 dataset.bed = Some(complete_download);
             }
-        };
+        }
 
         Ok(())
     }
@@ -362,6 +362,7 @@ impl UnvalidatedFile {
 /// let hash = hash_valid_download(Path::new("path/to/file.txt"))?;
 /// println!("File MD5: {}", hash);
 /// ```
+#[allow(clippy::large_stack_arrays)]
 pub fn hash_valid_download(download: impl AsRef<Path>) -> Result<String, ValidationError> {
     let Ok(file) = File::open(download.as_ref()) else {
         return Err(ValidationError::InaccessibleFile(
@@ -541,9 +542,8 @@ fn try_parse_fasta(file: impl AsRef<Path>) -> Result<(), ValidationError> {
             ));
         };
         while let Some(record) = fa_reader.records().next() {
-            match record {
-                Ok(_) => continue,
-                Err(msg) => return Err(ValidationError::InvalidFasta(format!("{msg}"))),
+            if let Err(msg) = record {
+                return Err(ValidationError::InvalidFasta(format!("{msg}")));
             }
         }
     } else if file.as_ref().extension().is_some_and(|ext| ext == "gz") {
@@ -558,9 +558,8 @@ fn try_parse_fasta(file: impl AsRef<Path>) -> Result<(), ValidationError> {
             ));
         };
         while let Some(record) = fa_reader.records().next() {
-            match record {
-                Ok(_) => continue,
-                Err(msg) => return Err(ValidationError::InvalidFasta(format!("{msg}"))),
+            if let Err(msg) = record {
+                return Err(ValidationError::InvalidFasta(format!("{msg}")));
             }
         }
     }
@@ -578,9 +577,8 @@ fn try_parse_genbank(file: impl AsRef<Path>) -> Result<(), ValidationError> {
     };
 
     for record in gbk_reader {
-        match record {
-            Ok(_) => continue,
-            Err(msg) => return Err(ValidationError::InvalidGenbank(format!("{msg}"))),
+        if let Err(msg) = record {
+            return Err(ValidationError::InvalidGenbank(format!("{msg}")));
         }
     }
 
@@ -612,9 +610,8 @@ fn try_parse_gff(file: impl AsRef<Path>) -> Result<(), ValidationError> {
         ));
     };
     while let Some(record) = gff_reader.record_bufs().next() {
-        match record {
-            Ok(_) => continue,
-            Err(msg) => return Err(ValidationError::InvalidGFF(format!("{msg}"))),
+        if let Err(msg) = record {
+            return Err(ValidationError::InvalidGFF(format!("{msg}")));
         }
     }
     Ok(())
@@ -630,9 +627,8 @@ fn try_parse_gtf(file: impl AsRef<Path>) -> Result<(), ValidationError> {
         ));
     };
     while let Some(record) = gff_reader.record_bufs().next() {
-        match record {
-            Ok(_) => continue,
-            Err(msg) => return Err(ValidationError::InvalidGTF(format!("{msg}"))),
+        if let Err(msg) = record {
+            return Err(ValidationError::InvalidGTF(format!("{msg}")));
         }
     }
     Ok(())
