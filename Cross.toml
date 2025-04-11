@@ -6,7 +6,6 @@ pre-build = [
 
 [target.aarch64-unknown-linux-gnu]
 pre-build = [
-    "apt-get update",
-    "apt-get install -y libssl-dev pkg-config",
+    "if [ -f /etc/arch-release ]; then sudo pacman -Sy --noconfirm pkgconf openssl; else apt-get update && apt-get install -y libssl-dev pkg-config; fi"
 ]
 

@@ -60,7 +60,7 @@ jobs:
         if: runner.os == 'Linux'
         env:
           OPENSSL_DIR: /usr
-          PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
+          PKG_CONFIG_PATH: ${{ contains(matrix.job.target, 'x86_64') && '/usr/lib/x86_64-linux-gnu/pkgconfig' || '/usr/lib/aarch64-linux-gnu/pkgconfig' }}
         run: cross build --release --target=${{ matrix.job.target }}
 
       # Build step for macOS: do not inject Linux-specific env vars.
