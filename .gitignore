@@ -9,6 +9,7 @@
 !LICENSE
 !Cargo.toml
 !Cargo.lock
+!Cross.toml
 
 !/src
 !/src/*.rs

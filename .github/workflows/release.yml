@@ -8,7 +8,6 @@ on:
 
 env:
   CICD_INTERMEDIATES_DIR: "_release-intermediates"
-  OPENSSL_DIR: /usr
 
 jobs:
   upload:
@@ -56,7 +55,17 @@ jobs:
         with:
           tool: cross@0.2.5
 
-      - name: Build with cross
+      # Separate build step for Linux: set env vars so pkg-config finds OpenSSL
+      - name: Build with cross on Linux
+        if: runner.os == 'Linux'
+        env:
+          OPENSSL_DIR: /usr
+          PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
+        run: cross build --release --target=${{ matrix.job.target }}
+
+      # Build step for macOS: do not inject Linux-specific env vars.
+      - name: Build with cross on macOS
+        if: runner.os == 'macOS'
         run: cross build --release --target=${{ matrix.job.target }}
 
       - name: Set binary name & path
