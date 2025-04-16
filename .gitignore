@@ -5,6 +5,7 @@
 !justfile
 !Dockerfile
 !install.sh
+!INSTALL.sh
 !README.md
 !LICENSE
 !Cargo.toml
