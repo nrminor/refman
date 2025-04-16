@@ -491,7 +491,7 @@ impl Project {
     pub fn register(mut self, new_dataset: RefDataset) -> Result<Self, EntryError> {
         // find the index of the old dataset to be updated with new information from
         // the user
-        let old_dataset_index: Vec<_> = self
+        let dataset_match_indices: Vec<_> = self
             .datasets()
             .iter()
             .enumerate()
@@ -501,7 +501,7 @@ impl Project {
 
         // if the label wasn't found, it's not in the registry, so it can be safely
         // appended without any fear of duplication
-        if old_dataset_index.is_empty() {
+        if dataset_match_indices.is_empty() {
             self.project.datasets.push(new_dataset);
             return Ok(self);
         }
@@ -509,21 +509,21 @@ impl Project {
         // Make sure that the above system that we *assume* will work doesn't actually break (it should never
         // be possible to have two dataset entries with the same label).
         assert_eq!(
-            old_dataset_index.len(),
+            dataset_match_indices.len(),
             1,
             "Invalid state slipped through the cracks when identifying which dataset should be updated with the new information for dataset '{}'. Somehow, multiple indices were returned: {:?}",
             &new_dataset.label,
-            &old_dataset_index
+            &dataset_match_indices
         );
 
         // With that assert passing, pull out the index usize
-        let old_dataset_index = old_dataset_index[0];
+        let dataset_match_idx = dataset_match_indices[0];
 
         // pull in a mutable reference to the slice of datasets, get a mutable reference to the one
         // dataset we need to update (using the index), and then update each of it's fields if the
         // user provided values for them.
-        let datasets = self.datasets_mut();
-        let dataset_to_update = &mut datasets[old_dataset_index];
+        let datasets_to_update = self.datasets_mut();
+        let dataset_to_update = &mut datasets_to_update[dataset_match_idx];
         if new_dataset.fasta.is_some() {
             dataset_to_update.fasta = new_dataset.fasta;
         }
@@ -1545,7 +1545,7 @@ async fn update_project_datasets(
         })
         // now use each successful download to update its associated dataset, returning an owned updated dataset or
         // a validation error (the update performs validation under the hood)
-        .flat_map(
+        .map(
             |(mut dataset, files)| -> Result<RefDataset, ValidationError> {
                 for file in files {
                     dataset.update_with_download(&file)?;
@@ -1553,7 +1553,7 @@ async fn update_project_datasets(
                 Ok(dataset)
             },
         )
-        .collect();
+        .collect::<Result<Vec<RefDataset>, ValidationError>>()?;
 
     // return the vector of updated `RefDataset` instances
     Ok(updated_datasets)

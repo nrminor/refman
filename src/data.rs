@@ -183,14 +183,6 @@ impl RefDataset {
             // that is not an Option<String>)
             (None, None, None, None, None) => Err(EntryError::LabelButNoFiles),
 
-            // The following cases occur when annotation file(s) are registered without a sequence file, e.g., FASTA or
-            // Genbank, to pull from/associate with.
-            (None, None, None, None, Some(label))
-            | (None, None, None, Some(label), None | Some(_))
-            | (None, None, Some(label), None | Some(_), None | Some(_)) => {
-                Err(EntryError::AnnotationsButNoSequence(label.to_string()))
-            }
-
             // If none of the above conditions are met, we're all good! Return an instance of the `RefDataset` struct
             // with validated combinations of fields.
             _ => {
