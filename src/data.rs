@@ -183,10 +183,10 @@ impl RefDataset {
         bed: Option<String>,
         tar: Option<String>,
     ) -> Result<Self, EntryError> {
-        match (&fasta, &genbank, &gff, &gtf, &bed) {
+        match (&fasta, &genbank, &gfa, &gff, &gtf, &bed, &tar) {
             // This is the case when no files are provided, but a label is (label is the only argument to this function
             // that is not an Option<String>)
-            (None, None, None, None, None) => Err(EntryError::LabelButNoFiles),
+            (None, None, None, None, None, None, None) => Err(EntryError::LabelButNoFiles),
 
             // If none of the above conditions are met, we're all good! Return an instance of the `RefDataset` struct
             // with validated combinations of fields.
