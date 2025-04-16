@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::{eyre::eyre, Result};
 use futures::StreamExt;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use log::{debug, error, info, warn};

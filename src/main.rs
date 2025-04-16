@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use clap_verbosity_flag::Verbosity;
-use color_eyre::{Result, eyre::Context};
+use color_eyre::{eyre::Context, Result};
 use fern::colors::{Color, ColoredLevelConfig};
 use refman::{
     cli::{self, Cli, Commands},
@@ -50,13 +50,14 @@ async fn main() -> Result<()> {
             gtf,
             gff,
             bed,
+            tar,
             registry,
             global,
         }) => {
             let new_dataset =
-                RefDataset::try_new(label, fasta, genbank, gfa, gff, gtf, bed).await?;
+                RefDataset::try_new(label, fasta, genbank, gfa, gff, gtf, bed, tar).await?;
             let options = RegistryOptions::try_new(None, None, &registry, global)?;
-            let mut project = options.read_registry()?.register(new_dataset)?;
+            let mut project = options.read_registry()?.register(new_dataset).await?;
             options.write_registry(&mut project)?;
             Ok(())
         }

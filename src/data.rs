@@ -7,9 +7,9 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    EntryError, ValidationError,
     downloads::check_url,
-    validate::{UnvalidatedFile, ValidatedFile, hash_valid_download},
+    validate::{hash_valid_download, UnvalidatedFile, ValidatedFile},
+    EntryError, ValidationError,
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -100,6 +100,7 @@ impl DownloadStatus {
 /// - GFF: General Feature Format for genomic features
 /// - GTF: Gene Transfer Format (a refined version of GFF)
 /// - BED: Browser Extensible Data format for genomic intervals
+/// - TAR: A tar-archive ("tarball") of arbitrary files
 ///
 /// Files are stored as optional strings, typically representing paths or identifiers to the actual
 /// data. This allows for flexible dataset configurations while maintaining data integrity through
@@ -114,6 +115,7 @@ pub struct RefDataset {
     pub gff: Option<DownloadStatus>,
     pub gtf: Option<DownloadStatus>,
     pub bed: Option<DownloadStatus>,
+    pub tar: Option<DownloadStatus>,
 }
 
 impl RefDataset {
@@ -136,6 +138,7 @@ impl RefDataset {
     /// * `gff` - Optional URL to a GFF format annotation file
     /// * `gtf` - Optional URL to a GTF format annotation file
     /// * `bed` - Optional URL to a BED format annotation file
+    /// # `tar` - Optional URL to a tar archive of arbitrary files
     ///
     /// # Returns
     ///
@@ -163,12 +166,13 @@ impl RefDataset {
     ///     None,
     ///     Some("https://example.com/hg38.gff".to_string()),
     ///     None,
+    ///     None,
     ///     None
     /// ).await?;
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::similar_names)]
+    #[allow(clippy::similar_names, clippy::too_many_arguments)]
     pub async fn try_new(
         label: String,
         fasta: Option<String>,
@@ -177,6 +181,7 @@ impl RefDataset {
         gff: Option<String>,
         gtf: Option<String>,
         bed: Option<String>,
+        tar: Option<String>,
     ) -> Result<Self, EntryError> {
         match (&fasta, &genbank, &gff, &gtf, &bed) {
             // This is the case when no files are provided, but a label is (label is the only argument to this function
@@ -233,6 +238,13 @@ impl RefDataset {
                 } else {
                     None
                 };
+                let tar = if let Some(url_to_check) = tar {
+                    let _ = check_url(&url_to_check).await?;
+                    let status = DownloadStatus::new(url_to_check);
+                    Some(status)
+                } else {
+                    None
+                };
 
                 // If all provided URLs are valid, set up an instance of a registry
                 Ok(Self {
@@ -243,6 +255,7 @@ impl RefDataset {
                     gff,
                     gtf,
                     bed,
+                    tar,
                 })
             }
         }
@@ -696,6 +709,12 @@ impl RefDataset {
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.bed = Some(updated_status);
+            }
+            UnvalidatedFile::Tar { .. } => {
+                let validated = downloaded_file.try_validate()?;
+                let updated_status = DownloadStatus::new_downloaded(validated);
+
+                self.tar = Some(updated_status);
             }
         }
 

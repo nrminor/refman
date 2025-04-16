@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{RefDataset, ValidationError, data::DownloadStatus};
+use crate::{data::DownloadStatus, RefDataset, ValidationError};
 
 #[derive(Debug)]
 pub enum UnvalidatedFile {
@@ -21,6 +21,7 @@ pub enum UnvalidatedFile {
     Gff { uri: String, local_path: PathBuf },
     Gtf { uri: String, local_path: PathBuf },
     Bed { uri: String, local_path: PathBuf },
+    Tar { uri: String, local_path: PathBuf },
 }
 
 impl UnvalidatedFile {
@@ -31,7 +32,8 @@ impl UnvalidatedFile {
             | UnvalidatedFile::Gfa { uri, .. }
             | UnvalidatedFile::Gff { uri, .. }
             | UnvalidatedFile::Gtf { uri, .. }
-            | UnvalidatedFile::Bed { uri, .. } => uri,
+            | UnvalidatedFile::Bed { uri, .. }
+            | UnvalidatedFile::Tar { uri, .. } => uri,
         }
     }
 
@@ -42,7 +44,8 @@ impl UnvalidatedFile {
             | UnvalidatedFile::Gfa { local_path, .. }
             | UnvalidatedFile::Gff { local_path, .. }
             | UnvalidatedFile::Gtf { local_path, .. }
-            | UnvalidatedFile::Bed { local_path, .. } => *local_path = path,
+            | UnvalidatedFile::Bed { local_path, .. }
+            | UnvalidatedFile::Tar { local_path, .. } => *local_path = path,
         }
     }
 
@@ -73,6 +76,10 @@ impl UnvalidatedFile {
                 uri,
                 local_path: path,
             },
+            UnvalidatedFile::Tar { uri, .. } => UnvalidatedFile::Tar {
+                uri,
+                local_path: path,
+            },
         }
     }
 
@@ -80,11 +87,12 @@ impl UnvalidatedFile {
     pub fn get_path(&self) -> &Path {
         match self {
             UnvalidatedFile::Fasta { local_path, .. }
-            | UnvalidatedFile::Bed { local_path, .. }
+            | UnvalidatedFile::Genbank { local_path, .. }
+            | UnvalidatedFile::Gfa { local_path, .. }
             | UnvalidatedFile::Gff { local_path, .. }
             | UnvalidatedFile::Gtf { local_path, .. }
-            | UnvalidatedFile::Gfa { local_path, .. }
-            | UnvalidatedFile::Genbank { local_path, .. } => local_path,
+            | UnvalidatedFile::Bed { local_path, .. }
+            | UnvalidatedFile::Tar { local_path, .. } => local_path,
         }
     }
 }
@@ -184,6 +192,8 @@ impl UnvalidatedFile {
                 try_parse_bed(local_path)?;
                 (uri, local_path)
             }
+            // Currently no validation is performed for tarballs
+            UnvalidatedFile::Tar { uri, local_path } => (uri, local_path),
         };
         let hash = hash_valid_download(local_path)?;
         let timestamp = Timestamp::now();
@@ -265,6 +275,11 @@ impl UnvalidatedFile {
                 let validated = self.try_validate()?;
                 let complete_download = DownloadStatus::new_downloaded(validated);
                 dataset.bed = Some(complete_download);
+            }
+            UnvalidatedFile::Tar { .. } => {
+                let validated = self.try_validate()?;
+                let complete_download = DownloadStatus::new_downloaded(validated);
+                dataset.tar = Some(complete_download);
             }
         }
 

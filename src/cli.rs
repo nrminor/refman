@@ -10,7 +10,7 @@ pub const INFO: &str = r"
 █  ███  ███  ████████  ████████  █  █  ██        ██  ██    █
 █  ████  ██        ██  ████████  ████  ██  ████  ██  ███   █
 
-refman (v1.3.1)
+refman (v1.3.2)
 ------------------------------------------------------------
 `refman` is a simple command-line tool for managing biological reference datasets often
 used in bioinformatics. These datasets may include raw sequence files, files encoding
@@ -23,7 +23,7 @@ between users to aid scientific reproducibility.
 #[derive(Parser)]
 #[clap(name = "refman")]
 #[clap(about = INFO)]
-#[clap(version = "v1.3.1")]
+#[clap(version = "v1.3.2")]
 pub struct Cli {
     #[command(flatten)]
     pub verbose: clap_verbosity_flag::Verbosity,
@@ -105,6 +105,10 @@ pub enum Commands {
         /// URL to reference range data in Browser Extensible Data (BED) format
         #[arg(long, required = false)]
         bed: Option<String>,
+
+        /// URL to reference a TAR archive of arbitrary data
+        #[arg(long, required = false)]
+        tar: Option<String>,
 
         /// Optional file path (absolute or relative) to the refman registry file.
         #[arg(short, long, required = false)]

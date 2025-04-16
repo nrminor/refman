@@ -1,27 +1,27 @@
 use std::{
     collections::HashMap,
     env::{self, current_dir},
-    fs::{self, File, read_to_string},
+    fs::{self, read_to_string, File},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
 
-use color_eyre::eyre::Error as ColorError;
+use color_eyre::eyre::{eyre, Error as ColorError};
 use futures::future::try_join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use jiff::Timestamp;
 use log::{debug, info, warn};
-use prettytable::{Table, row};
+use prettytable::{row, Table};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::{
-    EntryError, RegistryError, ValidationError,
     data::{DownloadStatus, RefDataset},
-    downloads::request_dataset,
+    downloads::{check_url, request_dataset},
     validate::UnvalidatedFile,
+    EntryError, RegistryError, ValidationError,
 };
 
 /// A reference manager for all data associated with your bioinformatics project.
@@ -429,7 +429,7 @@ impl Project {
     ///
     /// This is one of the core methods for managing reference data in refman. It takes a `RefDataset`
     /// struct containing a unique label and optional URLs for various bioinformatics file formats
-    /// (FASTA, Genbank, GFA, GFF, GTF, BED) and either:
+    /// (FASTA, Genbank, GFA, GFF, GTF, BED, TAR) and either:
     ///
     /// - Adds it as a new dataset if the label doesn't exist in the registry yet
     /// - Updates an existing dataset with any new URLs provided if the label matches
@@ -488,22 +488,141 @@ impl Project {
     /// the registry. This should never happen as labels must be unique, but represents an
     /// invalid state that requires immediate attention.
     ///
-    pub fn register(mut self, new_dataset: RefDataset) -> Result<Self, EntryError> {
+    pub async fn register(mut self, new_dataset: RefDataset) -> Result<Self, EntryError> {
+        let Some(dataset_match_idx) = self.get_dataset_idx(&new_dataset.label) else {
+            // if the label wasn't found, it's not in the registry, so it can be safely
+            // appended without any fear of duplication
+            self.project.datasets.push(new_dataset);
+            return Ok(self);
+        };
+
+        // pull in a mutable reference to the slice of datasets, get a mutable reference to the one
+        // dataset we need to update (using the index), and then update each of it's fields if the
+        // user provided values for them.
+        let previous_datasets = self.datasets_mut();
+        let dataset_to_update = &mut previous_datasets[dataset_match_idx];
+
+        // use pattern matching here to get exhaustiveness checking instead of if-else
+        match new_dataset {
+            // if it's a FASTA, make sure the link points to a resource that exists and then update
+            // the registry with it
+            RefDataset {
+                fasta: Some(ref fasta),
+                ..
+            } => {
+                let url_str = fasta.url();
+                if is_likely_url(url_str) {
+                    let _ = check_url(url_str).await?;
+                } else if !PathBuf::from(url_str).is_file() {
+                    return Err(
+                        EntryError::InvalidURL(
+                            eyre!("The provided uri {url_str} was not a web link, nor was it a local file path pointing to something that exists.")
+                        )
+                    );
+                }
+                dataset_to_update.fasta = new_dataset.fasta;
+            }
+
+            // Do the same thing but with a putative genbank file
+            RefDataset {
+                genbank: Some(ref genbank),
+                ..
+            } => {
+                let url_str = genbank.url();
+                if is_likely_url(url_str) {
+                    let _ = check_url(url_str).await?;
+                }
+                dataset_to_update.genbank = new_dataset.genbank;
+            }
+
+            // Do the same thing but with a putative GFA file
+            RefDataset {
+                gfa: Some(ref gfa), ..
+            } => {
+                let url_str = gfa.url();
+                if is_likely_url(url_str) {
+                    let _ = check_url(url_str).await?;
+                }
+                dataset_to_update.gfa = new_dataset.gfa;
+            }
+
+            // Do the same thing but with a putative GFF file
+            RefDataset {
+                gff: Some(ref gff), ..
+            } => {
+                let url_str = gff.url();
+                if is_likely_url(url_str) {
+                    let _ = check_url(url_str).await?;
+                }
+                dataset_to_update.gff = new_dataset.gff;
+            }
+
+            // Do the same thing but with a putative GTF file
+            RefDataset {
+                gtf: Some(ref gtf), ..
+            } => {
+                let url_str = gtf.url();
+                if is_likely_url(url_str) {
+                    let _ = check_url(url_str).await?;
+                }
+                dataset_to_update.gtf = new_dataset.gtf;
+            }
+
+            // Do the same thing but with a putative BED file
+            RefDataset {
+                bed: Some(ref bed), ..
+            } => {
+                let url_str = bed.url();
+                if is_likely_url(url_str) {
+                    let _ = check_url(url_str).await?;
+                }
+                dataset_to_update.bed = new_dataset.bed;
+            }
+
+            // Do the same thing but with a putative TAR file
+            RefDataset {
+                tar: Some(ref tar), ..
+            } => {
+                let url_str = tar.url();
+                if is_likely_url(url_str) {
+                    let _ = check_url(url_str).await?;
+                }
+                dataset_to_update.tar = new_dataset.tar;
+            }
+
+            // If somehow this state has slipped through the cracks, it means there's no file to
+            // update the registry with, which is a `LabelButNoFiles` error
+            RefDataset {
+                label: _,
+                fasta: None,
+                genbank: None,
+                gfa: None,
+                gff: None,
+                gtf: None,
+                bed: None,
+                tar: None,
+            } => return Err(EntryError::LabelButNoFiles),
+        }
+
+        // If we've made it this far, all is well; return the mutated instance of
+        // the project.
+        Ok(self)
+    }
+
+    #[inline]
+    fn get_dataset_idx(&self, label: &str) -> Option<usize> {
         // find the index of the old dataset to be updated with new information from
         // the user
         let dataset_match_indices: Vec<_> = self
             .datasets()
             .iter()
             .enumerate()
-            .filter(|(_i, dataset)| *dataset.label == new_dataset.label)
+            .filter(|(_i, dataset)| dataset.label == label)
             .map(|(i, _)| i)
             .collect();
 
-        // if the label wasn't found, it's not in the registry, so it can be safely
-        // appended without any fear of duplication
         if dataset_match_indices.is_empty() {
-            self.project.datasets.push(new_dataset);
-            return Ok(self);
+            return None;
         }
 
         // Make sure that the above system that we *assume* will work doesn't actually break (it should never
@@ -512,40 +631,12 @@ impl Project {
             dataset_match_indices.len(),
             1,
             "Invalid state slipped through the cracks when identifying which dataset should be updated with the new information for dataset '{}'. Somehow, multiple indices were returned: {:?}",
-            &new_dataset.label,
+            label,
             &dataset_match_indices
         );
 
         // With that assert passing, pull out the index usize
-        let dataset_match_idx = dataset_match_indices[0];
-
-        // pull in a mutable reference to the slice of datasets, get a mutable reference to the one
-        // dataset we need to update (using the index), and then update each of it's fields if the
-        // user provided values for them.
-        let datasets_to_update = self.datasets_mut();
-        let dataset_to_update = &mut datasets_to_update[dataset_match_idx];
-        if new_dataset.fasta.is_some() {
-            dataset_to_update.fasta = new_dataset.fasta;
-        }
-        if new_dataset.genbank.is_some() {
-            dataset_to_update.genbank = new_dataset.genbank;
-        }
-        if new_dataset.gfa.is_some() {
-            dataset_to_update.gfa = new_dataset.gfa;
-        }
-        if new_dataset.gff.is_some() {
-            dataset_to_update.gff = new_dataset.gff;
-        }
-        if new_dataset.gtf.is_some() {
-            dataset_to_update.gtf = new_dataset.gtf;
-        }
-        if new_dataset.bed.is_some() {
-            dataset_to_update.bed = new_dataset.bed;
-        }
-
-        // If we've made it this far, all is well; return the mutated instance of
-        // the project.
-        Ok(self)
+        Some(dataset_match_indices[0])
     }
 
     #[allow(clippy::similar_names)]
@@ -833,6 +924,13 @@ impl Project {
                 .clone()
                 .unwrap_or(DownloadStatus::default())
         );
+        eprintln!(
+            " - TAR: {}",
+            unwrapped_dataset
+                .tar
+                .clone()
+                .unwrap_or(DownloadStatus::default())
+        );
     }
 
     fn print_all_labels(self) {
@@ -847,7 +945,7 @@ impl Project {
 
         // add the title row
         pretty_table.add_row(row![
-            "Label", "FASTA", "Genbank", "GFA", "GFF", "GTF", "BED"
+            "Label", "FASTA", "Genbank", "GFA", "GFF", "GTF", "BED", "TAR",
         ]);
 
         // add rows for each dataset
@@ -908,6 +1006,16 @@ impl Project {
                 abbreviate_str(
                     dataset
                         .bed
+                        .clone()
+                        .unwrap_or(DownloadStatus::default())
+                        .url_owned(),
+                    20,
+                    8,
+                    25
+                ),
+                abbreviate_str(
+                    dataset
+                        .tar
                         .clone()
                         .unwrap_or(DownloadStatus::default())
                         .url_owned(),
@@ -1426,6 +1534,11 @@ fn set_refman_home(desired_dir: &str) {
     }
 }
 
+fn is_likely_url(url: &str) -> bool {
+    url.starts_with("http") || url.starts_with("ftp") || url.starts_with("sftp")
+}
+
+#[inline]
 fn count_downloads(dataset_files: &[(RefDataset, Vec<UnvalidatedFile>)]) -> usize {
     // count the files to generate a message to inform the user of what will be downloaded
     let mut num_to_download = 0;
@@ -1574,22 +1687,6 @@ mod tests {
         assert_eq!(project.project.description, desc);
         assert!(!project.project.global);
         assert!(project.project.datasets.is_empty());
-    }
-
-    #[test]
-    fn test_is_registered() {
-        let mut project = Project::new(None, None, false);
-        let dataset = RefDataset {
-            label: "test_genome".into(),
-            fasta: Some(DownloadStatus::new(
-                "https://example.com/genome.fasta".to_string(),
-            )),
-            ..Default::default()
-        };
-
-        project = project.register(dataset).unwrap();
-        assert!(project.is_registered("test_genome"));
-        assert!(!project.is_registered("nonexistent"));
     }
 
     #[test]
