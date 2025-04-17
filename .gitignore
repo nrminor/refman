@@ -11,6 +11,8 @@
 !Cargo.toml
 !Cargo.lock
 !Cross.toml
+!clippy.toml
+!rustfmt.toml
 
 !/src
 !/src/*.rs

@@ -1,14 +1,18 @@
 use flate2::read::GzDecoder;
+use gb_io::reader::SeqReader as GbkReader;
+use gfa::parser::GFAParserBuilder;
 use jiff::Timestamp;
 use md5::{Context, Digest};
 use noodles::{bed, fasta, gff, gtf};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::Display,
+    fmt::{self, Display, Formatter},
     fs::File,
     io::{BufReader, Read},
     path::{Path, PathBuf},
+    result::Result,
+    string::ToString,
 };
 
 use crate::{data::DownloadStatus, RefDataset, ValidationError};
@@ -107,7 +111,7 @@ pub struct ValidatedFile {
 }
 
 impl Display for ValidatedFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "ValidatedFile {{ uri: {}, validated: {}, hash: {}, last_validated: {} }}",
@@ -116,7 +120,7 @@ impl Display for ValidatedFile {
             self.hash.as_deref().unwrap_or("None"),
             self.last_validated
                 .as_ref()
-                .map_or_else(|| "None".to_string(), std::string::ToString::to_string)
+                .map_or_else(|| "None".to_string(), ToString::to_string)
         )
     }
 }
@@ -534,7 +538,7 @@ pub fn validate_files(dataset: &RefDataset) -> Result<(), ValidationError> {
         bed_callback(dataset.bed.as_ref()),
     ]
     .into_par_iter()
-    .filter_map(std::result::Result::err)
+    .filter_map(Result::err)
     .collect::<Vec<ValidationError>>();
 
     if !validation_callbacks.is_empty() {
@@ -547,7 +551,8 @@ pub fn validate_files(dataset: &RefDataset) -> Result<(), ValidationError> {
 }
 
 fn try_parse_fasta(file: impl AsRef<Path>) -> Result<(), ValidationError> {
-    if file.as_ref().ends_with(".fasta") {
+    if file.as_ref().ends_with(".fasta") || file.as_ref().extension().is_some_and(|ext| ext == "fa")
+    {
         let Ok(mut fa_reader) = File::open(file.as_ref())
             .map(BufReader::new)
             .map(fasta::Reader::new)
@@ -584,7 +589,7 @@ fn try_parse_fasta(file: impl AsRef<Path>) -> Result<(), ValidationError> {
 fn try_parse_genbank(file: impl AsRef<Path>) -> Result<(), ValidationError> {
     let Ok(gbk_reader) = File::open(file.as_ref())
         .map(BufReader::new)
-        .map(gb_io::reader::SeqReader::new)
+        .map(GbkReader::new)
     else {
         return Err(ValidationError::InaccessibleFile(
             file.as_ref().to_string_lossy().into_owned(),
@@ -601,7 +606,7 @@ fn try_parse_genbank(file: impl AsRef<Path>) -> Result<(), ValidationError> {
 }
 
 fn try_parse_gfa(file: impl AsRef<Path>) -> Result<(), ValidationError> {
-    let Ok(_) = gfa::parser::GFAParserBuilder::all()
+    let Ok(_) = GFAParserBuilder::all()
         .pedantic_errors()
         .segments(false)
         .build_bstr_id::<()>()

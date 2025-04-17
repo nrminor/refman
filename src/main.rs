@@ -1,4 +1,10 @@
-#![warn(clippy::pedantic, clippy::perf)]
+#![warn(
+    clippy::pedantic,
+    clippy::perf,
+    clippy::todo,
+    clippy::expect_used,
+    clippy::unwrap_used
+)]
 
 use std::path::PathBuf;
 

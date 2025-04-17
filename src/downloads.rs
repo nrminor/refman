@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{iter::Iterator, path::PathBuf, sync::Arc, time::Duration};
 
 use color_eyre::{eyre::eyre, Result};
 use futures::StreamExt;
@@ -9,6 +9,7 @@ use reqwest::Client;
 use tokio::{
     fs::{self, File},
     io::AsyncWriteExt,
+    time,
 };
 use url::Url;
 
@@ -172,7 +173,7 @@ async fn download_with_retries(client: &Client, url: &str) -> Result<reqwest::Re
                     e,
                     delay.as_secs()
                 );
-                tokio::time::sleep(delay).await;
+                time::sleep(delay).await;
             }
         }
     }
@@ -338,7 +339,7 @@ pub async fn check_url(url: &str) -> Result<Url> {
 /// - "<https://example.com>" (no path segments)
 #[inline]
 pub fn uri_to_filename(url: &Url) -> Result<&str> {
-    match url.path_segments().and_then(std::iter::Iterator::last) {
+    match url.path_segments().and_then(Iterator::last) {
         Some(filename) if !filename.is_empty() => Ok(filename),
         _ => Err(eyre!(
             "Failed to extract filename from URL, which may be corrupted or may not end with the name of a file: {}",

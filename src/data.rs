@@ -1,5 +1,5 @@
 use std::{
-    fmt::Display,
+    fmt::{self, Display},
     path::{Path, PathBuf},
 };
 
@@ -7,9 +7,9 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    downloads::check_url,
-    validate::{hash_valid_download, UnvalidatedFile, ValidatedFile},
     EntryError, ValidationError,
+    downloads::check_url,
+    validate::{UnvalidatedFile, ValidatedFile, hash_valid_download},
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -26,14 +26,14 @@ impl Default for DownloadStatus {
 }
 
 impl Display for DownloadStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DownloadStatus::NotYetDownloaded(undownloaded) => {
                 write!(f, "NotYetDownloaded: {undownloaded}")
-            }
+            },
             DownloadStatus::Downloaded(validated_file) => {
                 write!(f, "Downloaded: {validated_file}")
-            }
+            },
         }
     }
 }
@@ -257,7 +257,7 @@ impl RefDataset {
                     bed,
                     tar,
                 })
-            }
+            },
         }
     }
 
@@ -271,7 +271,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
                 DownloadStatus::Downloaded(validated_file) => {
                     debug!(
                         "Deciding whether to re-download the previously downloaded file at {:?}...",
@@ -318,7 +318,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
             },
             None => None,
         }
@@ -333,7 +333,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
                 DownloadStatus::Downloaded(validated_file) => {
                     debug!(
                         "Deciding whether to re-download the previously downloaded file at {:?}...",
@@ -379,7 +379,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
             },
             None => None,
         }
@@ -394,7 +394,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
                 DownloadStatus::Downloaded(validated_file) => {
                     debug!(
                         "Deciding whether to re-download the previously downloaded file at {:?}...",
@@ -440,7 +440,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
             },
             None => None,
         }
@@ -455,7 +455,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
                 DownloadStatus::Downloaded(validated_file) => {
                     debug!(
                         "Deciding whether to re-download the previously downloaded file at {:?}...",
@@ -501,7 +501,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
             },
             None => None,
         }
@@ -516,7 +516,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
                 DownloadStatus::Downloaded(validated_file) => {
                     debug!(
                         "Deciding whether to re-download the previously downloaded file at {:?}...",
@@ -562,7 +562,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
             },
             None => None,
         }
@@ -577,7 +577,7 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
                 DownloadStatus::Downloaded(validated_file) => {
                     debug!(
                         "Deciding whether to re-download the previously downloaded file at {:?}...",
@@ -623,7 +623,67 @@ impl RefDataset {
                         local_path: PathBuf::new(),
                     };
                     Some(unvalidated)
-                }
+                },
+            },
+            None => None,
+        }
+    }
+    pub(crate) fn get_tar_download(&self, target_dir: &Path) -> Option<UnvalidatedFile> {
+        match &self.tar {
+            Some(file) => match file {
+                DownloadStatus::NotYetDownloaded(uri) => {
+                    let unvalidated = UnvalidatedFile::Tar {
+                        uri: uri.to_string(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                },
+                DownloadStatus::Downloaded(validated_file) => {
+                    debug!(
+                        "Deciding whether to re-download the previously downloaded file at {:?}...",
+                        validated_file
+                    );
+
+                    // pull in the previously downloaded file path
+                    let old_path = &validated_file.local_path;
+
+                    // make sure the old file still exists. If not, it should be downloaded.
+                    if !old_path.exists() || !old_path.starts_with(target_dir) {
+                        return Some(UnvalidatedFile::Tar {
+                            uri: validated_file.uri.clone(),
+                            local_path: PathBuf::new(),
+                        });
+                    }
+
+                    // make sure there's a hash we can use to checksum
+                    let Some(old_hash) = &validated_file.hash else {
+                        debug!("The file was never hashed, so it will be re-downloaded");
+                        return None;
+                    };
+
+                    // make sure the file exists and still matches the hash. Otherwise, re-download.
+                    let Ok(new_hash) = hash_valid_download(old_path) else {
+                        debug!(
+                            "The checksum failed because the file could not be accessed, so it will be redownloaded"
+                        );
+                        return None;
+                    };
+                    if old_path.exists() && old_hash.eq(&new_hash) {
+                        debug!(
+                            "The path previously recorded for the download, {:?}, existed and it passed the checksum, so it will not be re-downloaded",
+                            old_path,
+                        );
+                        return None;
+                    }
+
+                    // if we've made it this far, the file should be redownloaded. Clear the
+                    // local path and fill the URI into an UnvalidatedFile variant
+                    let unvalidated = UnvalidatedFile::Tar {
+                        uri: validated_file.uri.clone(),
+                        local_path: PathBuf::new(),
+                    };
+                    Some(unvalidated)
+                },
             },
             None => None,
         }
@@ -679,43 +739,43 @@ impl RefDataset {
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.fasta = Some(updated_status);
-            }
+            },
             UnvalidatedFile::Genbank { .. } => {
                 let validated = downloaded_file.try_validate()?;
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.genbank = Some(updated_status);
-            }
+            },
             UnvalidatedFile::Gfa { .. } => {
                 let validated = downloaded_file.try_validate()?;
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.gfa = Some(updated_status);
-            }
+            },
             UnvalidatedFile::Gff { .. } => {
                 let validated = downloaded_file.try_validate()?;
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.gff = Some(updated_status);
-            }
+            },
             UnvalidatedFile::Gtf { .. } => {
                 let validated = downloaded_file.try_validate()?;
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.gtf = Some(updated_status);
-            }
+            },
             UnvalidatedFile::Bed { .. } => {
                 let validated = downloaded_file.try_validate()?;
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.bed = Some(updated_status);
-            }
+            },
             UnvalidatedFile::Tar { .. } => {
                 let validated = downloaded_file.try_validate()?;
                 let updated_status = DownloadStatus::new_downloaded(validated);
 
                 self.tar = Some(updated_status);
-            }
+            },
         }
 
         Ok(())

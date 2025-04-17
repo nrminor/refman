@@ -1,27 +1,27 @@
 use std::{
     collections::HashMap,
     env::{self, current_dir},
-    fs::{self, read_to_string, File},
+    fs::{self, File, read_to_string},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
 
-use color_eyre::eyre::{eyre, Error as ColorError};
+use color_eyre::eyre::{Error as ColorError, eyre};
 use futures::future::try_join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use jiff::Timestamp;
 use log::{debug, info, warn};
-use prettytable::{row, Table};
+use prettytable::{Table, row};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::{
+    EntryError, RegistryError, ValidationError,
     data::{DownloadStatus, RefDataset},
     downloads::{check_url, request_dataset},
     validate::UnvalidatedFile,
-    EntryError, RegistryError, ValidationError,
 };
 
 /// A reference manager for all data associated with your bioinformatics project.
@@ -510,18 +510,20 @@ impl Project {
                 fasta: Some(ref fasta),
                 ..
             } => {
+                // TODO: All checkes here, including whether a URI is likely a URL, whether that URL is valid, and
+                // whether a local path exists, could be included in a guard, relegating the single unhappy path
+                // where a provided URI is not a URL that exists and is not a path that exists, to a single branch arm
+                // for all file types.
                 let url_str = fasta.url();
                 if is_likely_url(url_str) {
                     let _ = check_url(url_str).await?;
                 } else if !PathBuf::from(url_str).is_file() {
-                    return Err(
-                        EntryError::InvalidURL(
-                            eyre!("The provided uri {url_str} was not a web link, nor was it a local file path pointing to something that exists.")
-                        )
-                    );
+                    return Err(EntryError::InvalidURL(eyre!(
+                        "The provided uri {url_str} was not a web link, nor was it a local file path pointing to something that exists."
+                    )));
                 }
                 dataset_to_update.fasta = new_dataset.fasta;
-            }
+            },
 
             // Do the same thing but with a putative genbank file
             RefDataset {
@@ -533,7 +535,7 @@ impl Project {
                     let _ = check_url(url_str).await?;
                 }
                 dataset_to_update.genbank = new_dataset.genbank;
-            }
+            },
 
             // Do the same thing but with a putative GFA file
             RefDataset {
@@ -544,7 +546,7 @@ impl Project {
                     let _ = check_url(url_str).await?;
                 }
                 dataset_to_update.gfa = new_dataset.gfa;
-            }
+            },
 
             // Do the same thing but with a putative GFF file
             RefDataset {
@@ -555,7 +557,7 @@ impl Project {
                     let _ = check_url(url_str).await?;
                 }
                 dataset_to_update.gff = new_dataset.gff;
-            }
+            },
 
             // Do the same thing but with a putative GTF file
             RefDataset {
@@ -566,7 +568,7 @@ impl Project {
                     let _ = check_url(url_str).await?;
                 }
                 dataset_to_update.gtf = new_dataset.gtf;
-            }
+            },
 
             // Do the same thing but with a putative BED file
             RefDataset {
@@ -577,7 +579,7 @@ impl Project {
                     let _ = check_url(url_str).await?;
                 }
                 dataset_to_update.bed = new_dataset.bed;
-            }
+            },
 
             // Do the same thing but with a putative TAR file
             RefDataset {
@@ -588,7 +590,7 @@ impl Project {
                     let _ = check_url(url_str).await?;
                 }
                 dataset_to_update.tar = new_dataset.tar;
-            }
+            },
 
             // If somehow this state has slipped through the cracks, it means there's no file to
             // update the registry with, which is a `LabelButNoFiles` error
@@ -667,7 +669,12 @@ impl Project {
                 let gtf = dataset.get_gtf_download(target_dir);
                 let gff = dataset.get_gff_download(target_dir);
                 let bed = dataset.get_bed_download(target_dir);
-                let files = [fasta, genbank, gfa, gff, gtf, bed]
+                let tar = dataset.get_tar_download(target_dir);
+                info!(
+                    "Preparing to download these files:\n{:?}",
+                    [&fasta, &genbank, &gfa, &gff, &gtf, &bed, &tar]
+                );
+                let files = [fasta, genbank, gfa, gff, gtf, bed, tar]
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
@@ -1373,7 +1380,7 @@ impl RegistryOptions {
 
         // Additionally, if a file exists but is empty, pretend it doesn't exist and do
         // the same thing as above
-        if std::fs::metadata(&self.resolved_path)?.len() == 0 {
+        if fs::metadata(&self.resolved_path)?.len() == 0 {
             let new_project = Project::default();
             return Ok(new_project);
         }
@@ -1456,7 +1463,7 @@ fn resolve_registry_path(
                 set_refman_home(path_str);
             }
             valid_path.join("refman.toml")
-        }
+        },
 
         // If the user did not request a particular directory, we then check if a global registry was requested.
         // If not, this is the next simplest case; just place the registry in the current working directory (ideally,
@@ -1483,14 +1490,14 @@ fn resolve_registry_path(
                     );
                     let path = PathBuf::from(path_str);
                     Some(path)
-                }
+                },
                 // If that environment variable isn't set, place it in the home directory.
                 Err(_) => {
                     debug!(
                         "The REFMAN_HOME variable is not set. The registry will thus be placed in its default location in the user's home directory."
                     );
                     dirs::home_dir()
-                }
+                },
             };
 
             // Finally, whether the home directory is being used or the current directory as a fallback, join on
@@ -1510,8 +1517,8 @@ fn resolve_registry_path(
                 debug!("setting the refman home to '{:?}'", resolved_home);
                 resolved_home
             }.join("refman.toml")
-        } // TODO: Eventually, it would be cool to have a global dotfile config for refman so the user doesn't have
-          // to tell it to operate globally every time.
+        }, // TODO: Eventually, it would be cool to have a global dotfile config for refman so the user doesn't have
+           // to tell it to operate globally every time.
     };
 
     Ok(registry_path)
@@ -1545,6 +1552,7 @@ fn count_downloads(dataset_files: &[(RefDataset, Vec<UnvalidatedFile>)]) -> usiz
     for (_, files) in dataset_files {
         num_to_download += files.len();
     }
+    info!("{num_to_download} downloads are confirmed. Proceeding...");
     num_to_download
 }
 
@@ -1558,7 +1566,7 @@ fn setup_progress_tracking(
     let message = match label {
         Some(label_str) => {
             format!("Downloading {num_to_download} files for project labeled '{label_str}'...")
-        }
+        },
         None => format!("Downloading all {num_to_download} files listed in the refman registry..."),
     };
 
@@ -1674,6 +1682,8 @@ async fn update_project_datasets(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
     use super::*;
     use tempfile::tempdir;
 

@@ -1,5 +1,6 @@
-use std::{fmt, io};
+use std::{error, fmt, io};
 use thiserror::Error;
+use toml::{de, ser};
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -46,7 +47,7 @@ impl fmt::Display for MultipleValidationErrors {
     }
 }
 
-impl std::error::Error for MultipleValidationErrors {}
+impl error::Error for MultipleValidationErrors {}
 
 #[derive(Debug, Error)]
 pub enum RegistryError {
@@ -69,11 +70,11 @@ pub enum RegistryError {
     #[error(
         "TOML registry format was invalid and could not be deserialized. A new registry may need to be initialized."
     )]
-    InvalidInputFormat(#[from] toml::de::Error),
+    InvalidInputFormat(#[from] de::Error),
     #[error(
         "The internal project representation was invalid, and thus cannot be serialized into the the TOML registry format."
     )]
-    InvalidOutputFormat(#[from] toml::ser::Error),
+    InvalidOutputFormat(#[from] ser::Error),
     #[error("unknown refman error")]
     Unknown,
 }
